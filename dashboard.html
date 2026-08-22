@@ -35,6 +35,10 @@
   .note-area{background:#0d0d12;border:1px solid #23233a;border-radius:7px;color:#e2e8f0;font-size:13px;resize:vertical;width:100%;padding:8px 10px;min-height:60px;}
   .note-area:focus{border-color:#4f46e5;}
   .kbd{background:#1e1e30;border:1px solid #2d2d4d;border-radius:4px;font-size:10px;padding:1px 5px;color:#64748b;}
+  .mode-btn{background:#0d0d12;color:#475569;transition:all .1s;cursor:pointer;}
+  .mode-btn.on{background:#4f46e5;color:#fff;}
+  .mode-btn:hover:not(.on){background:#1a1a2e;color:#94a3b8;}
+  .sem-score{display:inline-block;width:32px;height:3px;border-radius:2px;background:#4f46e5;vertical-align:middle;margin-right:4px;opacity:.7;}
 </style>
 </head>
 <body class="min-h-screen">
@@ -127,8 +131,16 @@
       </select>
       <button onclick="doSearch()" class="px-5 py-2.5 rounded-lg text-sm font-medium text-white shrink-0" style="background:#4f46e5">Search</button>
     </div>
-    <div class="mt-2 text-[12px] text-[#334155]">
-      <kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> back
+    <!-- Mode selector -->
+    <div class="flex items-center gap-3 mt-3">
+      <span class="text-[11px] text-[#334155]">Mode</span>
+      <div class="flex rounded-lg overflow-hidden border border-[#23233a]">
+        <button onclick="setMode('hybrid')"  id="mode-hybrid"  class="mode-btn on  px-3 py-1 text-[12px]">Hybrid</button>
+        <button onclick="setMode('semantic')" id="mode-semantic" class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Semantic</button>
+        <button onclick="setMode('keyword')" id="mode-keyword"  class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Keyword</button>
+      </div>
+      <span id="mode-hint" class="text-[11px] text-[#334155]">Finds by meaning + exact words</span>
+      <span class="text-[11px] text-[#23233a] ml-auto"><kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> home</span>
     </div>
   </div>
   <div id="search-status" class="text-[#475569] text-sm mb-4 min-h-[20px]"></div>
@@ -478,37 +490,108 @@ function exportSession(sid){
   a.href='/api/export/'+sid;a.click();
 }
 
+// ── Search mode ─────────────────────────────────────────────────────────────
+let searchMode = 'hybrid';
+const modeHints = {
+  hybrid:  'Finds by meaning + exact words',
+  semantic:'Finds by meaning — works without knowing exact words',
+  keyword: 'Finds exact words and phrases only',
+};
+function setMode(m){
+  searchMode=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('mode-'+m).classList.add('on');
+  document.getElementById('mode-hint').textContent=modeHints[m];
+}
+
 // ── Search ─────────────────────────────────────────────────────────────────
 async function doSearch(){
-  const q=document.getElementById('q').value.trim();
-  const last=document.getElementById('q-time').value;
+  const q    = document.getElementById('q').value.trim();
+  const last = document.getElementById('q-time').value;
   if(!q){document.getElementById('search-status').textContent='Enter a query.';return;}
   document.getElementById('search-status').textContent='Searching…';
   document.getElementById('search-results').innerHTML='';
-  const results=await api('/api/search?'+new URLSearchParams({q,last,limit:60}));
-  if(!results.length){document.getElementById('search-status').textContent=`No results for "${q}"`;return;}
-  document.getElementById('search-status').textContent=`${results.length} result(s) for "${q}"`;
+
+  let kwResults=[], semResults=[];
+
+  if(searchMode==='keyword'||searchMode==='hybrid'){
+    kwResults = await api('/api/search?'+new URLSearchParams({q,last,limit:40}));
+  }
+  if(searchMode==='semantic'||searchMode==='hybrid'){
+    semResults = await api('/api/semantic?'+new URLSearchParams({q,limit:30}));
+  }
+
+  // Hybrid: merge by session, RRF-style dedup
+  // Build unified result list keyed by session_id
   const bySession={};
-  results.forEach(r=>{if(!bySession[r.session_id])bySession[r.session_id]=[];bySession[r.session_id].push(r);});
-  document.getElementById('search-results').innerHTML=Object.entries(bySession).map(([sid,msgs])=>{
-    const first=msgs[0];
+
+  kwResults.forEach((r,rank)=>{
+    const sid=r.session_id;
+    if(!bySession[sid])bySession[sid]={msgs:[],semScore:0,kwRank:rank,sources:new Set()};
+    bySession[sid].msgs.push({...r,source:'keyword'});
+    bySession[sid].sources.add('keyword');
+  });
+
+  semResults.forEach(r=>{
+    const sid=r.session_id;
+    if(!bySession[sid])bySession[sid]={msgs:[],semScore:0,kwRank:999,sources:new Set()};
+    // Only add if not already from keyword (avoid dup messages)
+    const alreadyHas=bySession[sid].msgs.some(m=>m.text===r.text);
+    if(!alreadyHas)bySession[sid].msgs.push({...r,source:'semantic'});
+    bySession[sid].semScore=Math.max(bySession[sid].semScore,r.score||0);
+    bySession[sid].sources.add('semantic');
+  });
+
+  const sessions=Object.entries(bySession);
+  if(!sessions.length){
+    document.getElementById('search-status').textContent=`No results for "${q}"`;
+    return;
+  }
+
+  // Sort: semantic score wins for semantic-only; keyword rank wins for keyword-only; hybrid blends
+  sessions.sort(([,a],[,b])=>{
+    const scoreA = a.semScore*0.6 + (1/(1+a.kwRank))*0.4;
+    const scoreB = b.semScore*0.6 + (1/(1+b.kwRank))*0.4;
+    return scoreB-scoreA;
+  });
+
+  const total=sessions.reduce((s,[,v])=>s+v.msgs.length,0);
+  document.getElementById('search-status').textContent=
+    `${total} result(s) across ${sessions.length} session(s) — ${searchMode} mode`;
+
+  document.getElementById('search-results').innerHTML=sessions.map(([sid,data])=>{
     const session=allSessions.find(s=>s.session_id===sid);
-    const title=session?.title||sid.slice(0,8)+'…';
+    const title=session?.title||data.msgs[0]?.title||sid.slice(0,8)+'…';
     const tags=(session?.project_tags||'').split(',').filter(Boolean).map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
-    const msgHtml=msgs.slice(0,6).map(m=>{
+    const isSem=data.sources.has('semantic');
+    const semBadge=isSem?`<span class="text-[10px] text-[#818cf8] border border-[#3730a3] rounded px-1.5 py-0.5">∿ semantic</span>`:'';
+    const first=data.msgs[0];
+
+    const msgHtml=data.msgs.slice(0,6).map(m=>{
       const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
-      return`<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${highlight(m.text.slice(0,360),q)}</span></div>`;
+      const txt=(m.text||m.content_text||'').slice(0,380);
+      // Show similarity bar for semantic results
+      const semBar=m.source==='semantic'&&m.score
+        ?`<span class="sem-score" style="width:${Math.round(m.score*40)}px" title="similarity: ${Math.round(m.score*100)}%"></span>`:'';
+      return`<div class="${cls} pl-3 py-1.5">
+        <span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span>
+        ${semBar}<span class="text-[#cbd5e1] text-[12px] leading-relaxed">${highlight(txt,searchMode!=='semantic'?q:'')}</span>
+      </div>`;
     }).join('');
+
     return`<div class="card p-4 fade-in">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div class="flex items-center gap-2 flex-wrap"><span class="text-white text-[13px] font-medium">${esc(title)}</span>${tags}</div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-white text-[13px] font-medium">${esc(title)}</span>
+          ${tags}${semBadge}
+        </div>
         <div class="flex items-center gap-2">
-          <span class="text-[#334155] text-[12px]">${relTime(first.ts)}</span>
+          <span class="text-[#334155] text-[12px]">${relTime(first?.ts)}</span>
           <button onclick="exportSession('${sid}')" class="text-[11px] text-[#334155] hover:text-[#94a3b8] border border-[#23233a] rounded px-2 py-0.5">↓ md</button>
         </div>
       </div>
       <div class="space-y-1.5">${msgHtml}</div>
-      ${msgs.length>6?`<div class="text-[#334155] text-[11px] mt-2">+${msgs.length-6} more</div>`:''}
+      ${data.msgs.length>6?`<div class="text-[#334155] text-[11px] mt-2">+${data.msgs.length-6} more</div>`:''}
     </div>`;
   }).join('');
 }

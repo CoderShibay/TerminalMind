@@ -58,6 +58,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS prompts_fts USING fts5(
     content_rowid='id'
 );
 
+-- Semantic embeddings (one row per indexed message)
+CREATE TABLE IF NOT EXISTS message_embeddings (
+    message_id  INTEGER PRIMARY KEY REFERENCES claude_messages(id),
+    embedding   BLOB NOT NULL,   -- float32 numpy array, L2-normalized
+    model       TEXT             -- model name that generated this
+);
+
 -- Pinned sessions
 CREATE TABLE IF NOT EXISTS session_pins (
     session_id  TEXT PRIMARY KEY,

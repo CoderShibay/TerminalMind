@@ -19,13 +19,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
-from indexer import claude_history, claude_sessions, claude_transcripts, title_engine
+from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder
 from cli import search, sessions, status, verify, today
 
 HELP = __doc__
 
 
-def sync(conn, verbose: bool = True, titles: bool = True) -> None:
+def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True) -> None:
     h = claude_history.run(conn)
     t = claude_transcripts.run(conn)
     s = claude_sessions.run(conn)
@@ -34,8 +34,13 @@ def sync(conn, verbose: bool = True, titles: bool = True) -> None:
         title_note = f"{titled} titles via {method}" if titled else "titles up to date"
     else:
         title_note = "titles skipped"
+    if embed:
+        e = embedder.run(conn, verbose=verbose and (h+t > 0))
+        embed_note = f"{e} embedded" if e else "embeddings up to date"
+    else:
+        embed_note = "embeddings skipped"
     if verbose:
-        print(f"  synced  {h} prompts  │  {t} messages  │  {s} sessions  │  {title_note}")
+        print(f"  synced  {h} prompts  │  {t} messages  │  {s} sessions  │  {title_note}  │  {embed_note}")
 
 
 def main():

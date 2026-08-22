@@ -18,12 +18,32 @@ _local = threading.local()
 
 HTML_PATH = Path(__file__).parent / "dashboard.html"
 
+# Embedding matrix cache — rebuilt after each sync
+_embed_matrix: "np.ndarray | None" = None
+_embed_ids:    "list[int] | None"   = None
+_embed_dirty   = True   # True = needs rebuild on next semantic search
+
 
 def get_conn():
     """Return a per-thread SQLite connection (SQLite is not thread-safe)."""
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = init_db()
     return _local.conn
+
+
+def _get_embed_cache(conn):
+    global _embed_matrix, _embed_ids, _embed_dirty
+    if _embed_dirty or _embed_matrix is None:
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent))
+            from indexer.embedder import load_matrix
+            import numpy as np
+            _embed_matrix, _embed_ids = load_matrix(conn)
+            _embed_dirty = False
+        except Exception:
+            return None, None
+    return _embed_matrix, _embed_ids
 
 
 # ── API endpoints ─────────────────────────────────────────────────────────────
@@ -382,15 +402,61 @@ def api_view(session_id: str):
     return {"ok": True}
 
 
+@app.get("/api/semantic")
+def api_semantic(q: str = Query(default=""), limit: int = Query(default=30)):
+    if not q:
+        return []
+    import numpy as np
+    conn = get_conn()
+    matrix, ids = _get_embed_cache(conn)
+    if matrix is None:
+        return []
+    from indexer.embedder import embed_query
+    qvec = embed_query(q)
+    scores = matrix @ qvec                          # cosine sim (L2-normalized)
+    top_idx = np.argsort(scores)[::-1][:limit]
+
+    results = []
+    for idx in top_idx:
+        score = float(scores[idx])
+        if score < 0.25:                            # minimum relevance threshold
+            break
+        msg_id = ids[idx]
+        row = conn.execute(
+            """SELECT m.role, m.content_text, m.ts, m.session_id
+               FROM claude_messages m WHERE m.id = ?""",
+            (msg_id,)
+        ).fetchone()
+        if row and row["content_text"]:
+            session = conn.execute(
+                "SELECT title, project_tags FROM session_titles WHERE session_id=?",
+                (row["session_id"],)
+            ).fetchone()
+            results.append({
+                "role":       row["role"],
+                "text":       row["content_text"][:500],
+                "ts":         row["ts"],
+                "session_id": row["session_id"],
+                "project":    session["project_tags"] if session else "",
+                "score":      round(score, 3),
+                "source":     "semantic",
+                "title":      session["title"] if session else row["session_id"][:8],
+            })
+    return results
+
+
 @app.get("/api/sync")
 def api_sync():
-    from indexer import claude_history, claude_sessions, claude_transcripts, title_engine
+    global _embed_dirty
+    from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder
     conn = get_conn()
     h = claude_history.run(conn)
     t = claude_transcripts.run(conn)
     s = claude_sessions.run(conn)
-    titled = title_engine.run(conn, use_ollama=False)  # fast sync: heuristic only
-    return {"prompts": h, "messages": t, "sessions": s, "titles": titled}
+    titled, _ = title_engine.run(conn, use_ollama=False)
+    e = embedder.run(conn)
+    _embed_dirty = True   # invalidate cache so next semantic search reloads
+    return {"prompts": h, "messages": t, "sessions": s, "titles": titled, "embedded": e}
 
 
 @app.get("/", response_class=HTMLResponse)
