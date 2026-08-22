@@ -27,7 +27,11 @@
   .tab-btn{padding:6px 16px;border-radius:7px;font-size:13px;color:#64748b;cursor:pointer;transition:all .12s;}
   .tab-btn.on{background:#14141f;color:#e2e8f0;border:1px solid #23233a;}
   .tab-btn:hover:not(.on){color:#cbd5e1;}
-  .heat-cell{border-radius:2px;transition:opacity .1s;}
+  .heat-cell{border-radius:2px;transition:opacity .1s;cursor:pointer;}
+  .heat-cell.selected{outline:2px solid #818cf8;outline-offset:1px;}
+  .title-edit-input{background:#0d0d12;border:1px solid #4f46e5;border-radius:5px;color:#fff;font-size:14px;font-weight:500;padding:1px 6px;width:100%;max-width:400px;}
+  .rename-btn{opacity:0;font-size:11px;color:#64748b;margin-left:4px;cursor:pointer;transition:opacity .1s;}
+  .scard:hover .rename-btn{opacity:1;}
   .heat-cell:hover{opacity:.7;}
   .pin-btn{opacity:0;transition:opacity .15s;}
   .scard:hover .pin-btn,.scard.expanded .pin-btn{opacity:1;}
@@ -35,7 +39,7 @@
   .note-area{background:#0d0d12;border:1px solid #23233a;border-radius:7px;color:#e2e8f0;font-size:13px;resize:vertical;width:100%;padding:8px 10px;min-height:60px;}
   .note-area:focus{border-color:#4f46e5;}
   .kbd{background:#1e1e30;border:1px solid #2d2d4d;border-radius:4px;font-size:10px;padding:1px 5px;color:#64748b;}
-  .mode-btn{background:#0d0d12;color:#475569;transition:all .1s;cursor:pointer;}
+  .mode-btn{background:#0d0d12;color:#94a3b8;transition:all .1s;cursor:pointer;}
   .mode-btn.on{background:#4f46e5;color:#fff;}
   .mode-btn:hover:not(.on){background:#1a1a2e;color:#94a3b8;}
   .sem-score{display:inline-block;width:32px;height:3px;border-radius:2px;background:#4f46e5;vertical-align:middle;margin-right:4px;opacity:.7;}
@@ -55,12 +59,12 @@
   </div>
   <div class="flex items-center gap-2 ml-auto flex-wrap">
     <div id="tag-bar" class="flex gap-1.5 flex-wrap items-center">
-      <button id="clear-filter-btn" onclick="clearFilter()" class="hidden text-[11px] text-[#475569] hover:text-[#94a3b8] border border-[#23233a] rounded-md px-2 py-0.5">✕ clear</button>
+      <button id="clear-filter-btn" onclick="clearFilter()" class="hidden text-[11px] text-[#94a3b8] hover:text-[#94a3b8] border border-[#23233a] rounded-md px-2 py-0.5">✕ clear</button>
     </div>
-    <button onclick="doSync()" id="sync-btn" class="flex items-center gap-1.5 text-[12px] text-[#475569] hover:text-[#94a3b8] transition-colors">
+    <button onclick="doSync()" id="sync-btn" class="flex items-center gap-1.5 text-[12px] text-[#94a3b8] hover:text-[#94a3b8] transition-colors">
       <span id="sync-icon" class="text-[14px]">↻</span> Sync
     </button>
-    <div id="db-pill" class="text-[11px] text-[#2d2d4d] font-mono"></div>
+    <div id="db-pill" class="text-[11px] text-[#94a3b8] font-mono"></div>
   </div>
 </div>
 
@@ -71,30 +75,68 @@
   <div class="grid grid-cols-3 gap-3 mb-5">
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-prompts">—</div>
-      <div class="text-[12px] text-[#475569]">prompts</div>
+      <div class="text-[12px] text-[#94a3b8]">prompts</div>
     </div>
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-messages">—</div>
-      <div class="text-[12px] text-[#475569]">messages</div>
+      <div class="text-[12px] text-[#94a3b8]">messages</div>
     </div>
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-sessions">—</div>
-      <div class="text-[12px] text-[#475569]">sessions</div>
+      <div class="text-[12px] text-[#94a3b8]">sessions</div>
+    </div>
+  </div>
+
+  <!-- Stats panel -->
+  <div class="card p-4 mb-4" id="stats-panel">
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div>
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">This Week</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-w-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-w-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-[13px] font-medium text-[#818cf8] truncate max-w-[100px]" id="st-w-proj">—</div><div class="text-[11px] text-[#94a3b8]">top project</div></div>
+        </div>
+      </div>
+      <div class="border-l border-[#23233a]">
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">This Month</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-m-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-m-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-[13px] font-medium text-[#818cf8] truncate max-w-[100px]" id="st-m-proj">—</div><div class="text-[11px] text-[#94a3b8]">top project</div></div>
+        </div>
+      </div>
+      <div class="border-l border-[#23233a]">
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">All Time</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-a-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-a-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Activity heatmap -->
   <div class="card p-4 mb-5">
-    <div class="text-[12px] text-[#475569] mb-3 flex items-center justify-between">
-      <span>Activity <span class="text-[#334155]">(last 52 weeks)</span></span>
-      <span id="heatmap-legend" class="flex items-center gap-1 text-[11px] text-[#334155]">less <span class="flex gap-0.5" id="heat-legend-cells"></span> more</span>
+    <div class="text-[12px] text-[#94a3b8] mb-3 flex items-center justify-between">
+      <span>Activity <span class="text-[#94a3b8]">(last 52 weeks)</span>
+        <span id="day-filter-pill" class="hidden ml-2 text-[11px] text-[#818cf8] border border-[#3730a3] rounded-md px-2 py-0.5 cursor-pointer" onclick="clearDayFilter()">
+          <span id="day-filter-label"></span> &nbsp;✕
+        </span>
+      </span>
+      <span class="flex items-center gap-1 text-[11px] text-[#94a3b8]">click a day to filter &nbsp;·&nbsp; less <span class="flex gap-0.5" id="heat-legend-cells"></span> more</span>
     </div>
     <div id="heatmap" class="overflow-x-auto"></div>
   </div>
 
   <!-- Pinned sessions -->
   <div id="pinned-section" class="hidden mb-5">
-    <div class="text-[11px] font-semibold uppercase tracking-widest text-[#475569] mb-2 flex items-center gap-2">
+    <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] mb-2 flex items-center gap-2">
       <span>📌 Pinned</span>
     </div>
     <div id="pinned-list" class="space-y-1.5"></div>
@@ -102,10 +144,10 @@
 
   <!-- Session list -->
   <div id="session-list" class="space-y-1"></div>
-  <div id="empty-state" class="hidden text-center text-[#334155] py-16 text-sm">No sessions match this filter.</div>
+  <div id="empty-state" class="hidden text-center text-[#94a3b8] py-16 text-sm">No sessions match this filter.</div>
 
   <!-- Keyboard hint -->
-  <div class="text-center text-[11px] text-[#23233a] mt-6 pb-4">
+  <div class="text-center text-[11px] text-[#94a3b8] mt-6 pb-4">
     <kbd class="kbd">j</kbd> / <kbd class="kbd">k</kbd> navigate &nbsp;·&nbsp;
     <kbd class="kbd">space</kbd> expand &nbsp;·&nbsp;
     <kbd class="kbd">p</kbd> pin &nbsp;·&nbsp;
@@ -123,7 +165,7 @@
       <input id="q" type="text" placeholder="Search across all conversations…"
         class="flex-1 bg-[#0d0d12] border border-[#23233a] rounded-lg px-4 py-2.5 text-white text-[14px]"
         onkeydown="if(event.key==='Enter')doSearch()">
-      <select id="q-time" class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2.5 text-[#64748b] text-sm">
+      <select id="q-time" class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2.5 text-[#94a3b8] text-sm">
         <option value="">All time</option>
         <option value="24h">Last 24h</option>
         <option value="7d">Last 7 days</option>
@@ -133,24 +175,24 @@
     </div>
     <!-- Mode selector -->
     <div class="flex items-center gap-3 mt-3">
-      <span class="text-[11px] text-[#334155]">Mode</span>
+      <span class="text-[11px] text-[#94a3b8]">Mode</span>
       <div class="flex rounded-lg overflow-hidden border border-[#23233a]">
         <button onclick="setMode('hybrid')"  id="mode-hybrid"  class="mode-btn on  px-3 py-1 text-[12px]">Hybrid</button>
         <button onclick="setMode('semantic')" id="mode-semantic" class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Semantic</button>
         <button onclick="setMode('keyword')" id="mode-keyword"  class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Keyword</button>
       </div>
-      <span id="mode-hint" class="text-[11px] text-[#334155]">Finds by meaning + exact words</span>
-      <span class="text-[11px] text-[#23233a] ml-auto"><kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> home</span>
+      <span id="mode-hint" class="text-[11px] text-[#94a3b8]">Finds by meaning + exact words</span>
+      <span class="text-[11px] text-[#94a3b8] ml-auto"><kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> home</span>
     </div>
   </div>
-  <div id="search-status" class="text-[#475569] text-sm mb-4 min-h-[20px]"></div>
+  <div id="search-status" class="text-[#94a3b8] text-sm mb-4 min-h-[20px]"></div>
   <div id="search-results" class="space-y-3"></div>
 </div>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let allSessions=[], activeTag=null, expandedSession=null;
-let focusedIdx=-1;  // keyboard nav index into visible cards
+let allSessions=[], activeTag=null, activeDayFilter=null, expandedSession=null;
+let focusedIdx=-1;
 let pinnedIds=new Set();
 
 // ── Utils ──────────────────────────────────────────────────────────────────
@@ -199,6 +241,7 @@ function setTab(name,push=true){
 }
 function goHome(){
   clearFilter(false);
+  if(activeDayFilter){ activeDayFilter=null; document.getElementById('day-filter-pill')?.classList.add('hidden'); document.querySelectorAll('.heat-cell').forEach(el=>el.classList.remove('selected')); }
   if(expandedSession){
     document.getElementById('detail-'+expandedSession)?.classList.add('hidden');
     document.getElementById('card-'+expandedSession)?.classList.remove('expanded');
@@ -226,7 +269,7 @@ async function loadTags(){
     btn.onclick=()=>filterTag(t.tag);
     btn.id='tag-'+t.tag;
     btn.className='tag';
-    btn.innerHTML=`${esc(t.tag)} <span class="text-[#334155] ml-1">${t.count}</span>`;
+    btn.innerHTML=`${esc(t.tag)} <span class="text-[#94a3b8] ml-1">${t.count}</span>`;
     bar.appendChild(btn);
   });
   bar.appendChild(existing||document.getElementById('clear-filter-btn'));
@@ -246,6 +289,24 @@ function clearFilter(rerender=true){
   if(rerender)renderSessions();
 }
 
+function filterDay(dateStr){
+  activeDayFilter = activeDayFilter===dateStr ? null : dateStr;
+  // Update highlighted cell
+  document.querySelectorAll('.heat-cell').forEach(el=>el.classList.remove('selected'));
+  if(activeDayFilter){
+    document.getElementById('hcell-'+activeDayFilter)?.classList.add('selected');
+    document.getElementById('day-filter-label').textContent=activeDayFilter;
+    document.getElementById('day-filter-pill').classList.remove('hidden');
+  } else {
+    document.getElementById('day-filter-pill').classList.add('hidden');
+  }
+  renderSessions();
+}
+
+function clearDayFilter(){
+  filterDay(null);
+}
+
 // ── Status + sessions ──────────────────────────────────────────────────────
 async function loadStatus(){
   const d=await api('/api/status');
@@ -253,6 +314,18 @@ async function loadStatus(){
   document.getElementById('s-messages').textContent=fmt(d.total_messages);
   document.getElementById('s-sessions').textContent=fmt(d.total_sessions);
   document.getElementById('db-pill').textContent=d.db_size_kb+' KB';
+}
+
+async function loadStats(){
+  const d=await api('/api/stats');
+  document.getElementById('st-w-sess').textContent=fmt(d.week.sessions);
+  document.getElementById('st-w-msgs').textContent=fmt(d.week.messages);
+  document.getElementById('st-w-proj').textContent=d.week.top_project||'—';
+  document.getElementById('st-m-sess').textContent=fmt(d.month.sessions);
+  document.getElementById('st-m-msgs').textContent=fmt(d.month.messages);
+  document.getElementById('st-m-proj').textContent=d.month.top_project||'—';
+  document.getElementById('st-a-sess').textContent=fmt(d.all.sessions);
+  document.getElementById('st-a-msgs').textContent=fmt(d.all.prompts);
 }
 async function loadSessions(){
   [allSessions]=await Promise.all([api('/api/sessions?limit=500')]);
@@ -289,7 +362,7 @@ async function loadHeatmap(){
   [1,3,5].forEach(d=>{
     const t=document.createElementNS('http://www.w3.org/2000/svg','text');
     t.setAttribute('x','0'); t.setAttribute('y',(d*(W+GAP)+W)+'px');
-    t.setAttribute('font-size','9'); t.setAttribute('fill','#334155');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#64748b');
     t.textContent=dayNames[d]; svg.appendChild(t);
   });
 
@@ -307,7 +380,10 @@ async function loadHeatmap(){
       rect.setAttribute('y',(d*(W+GAP))+'px');
       rect.setAttribute('width',W); rect.setAttribute('height',W);
       rect.setAttribute('rx','2'); rect.setAttribute('fill',levels[level]);
-      rect.setAttribute('title',`${key}: ${count} messages`);
+      rect.setAttribute('title',`${key}: ${count} messages — click to filter`);
+      rect.setAttribute('id','hcell-'+key);
+      rect.classList.add('heat-cell');
+      if(count>0) rect.addEventListener('click',()=>filterDay(key));
       svg.appendChild(rect);
       const m=date.toLocaleString('en-GB',{month:'short'});
       if(!months[m]&&d===0)months[m]=w;
@@ -318,7 +394,7 @@ async function loadHeatmap(){
     const t=document.createElementNS('http://www.w3.org/2000/svg','text');
     t.setAttribute('x',(LABEL+w*(W+GAP))+'px');
     t.setAttribute('y',(7*(W+GAP)+14)+'px');
-    t.setAttribute('font-size','9'); t.setAttribute('fill','#475569');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#94a3b8');
     t.textContent=m; svg.appendChild(t);
   });
 
@@ -344,6 +420,11 @@ function renderSessions(){
   const empty=document.getElementById('empty-state');
   let sessions=allSessions.filter(s=>!pinnedIds.has(s.session_id));
   if(activeTag)sessions=sessions.filter(s=>(s.project_tags||'').includes(activeTag));
+  if(activeDayFilter)sessions=sessions.filter(s=>{
+    if(!s.started_at)return false;
+    const d=new Date(s.started_at);
+    return d.toISOString().slice(0,10)===activeDayFilter;
+  });
   if(!sessions.length){list.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
 
@@ -354,7 +435,7 @@ function renderSessions(){
 
   list.innerHTML=sorted.map(g=>`
     <div class="mb-5">
-      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#334155] py-2 mb-1.5 sticky top-[52px] z-10" style="background:#0d0d12cc;backdrop-filter:blur(8px)">${esc(g)}</div>
+      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] py-2 mb-1.5 sticky top-[52px] z-10" style="background:#0d0d12cc;backdrop-filter:blur(8px)">${esc(g)}</div>
       <div class="space-y-1.5">${groups[g].map(s=>renderCard(s)).join('')}</div>
     </div>`).join('');
   focusedIdx=-1;
@@ -365,23 +446,27 @@ function renderCard(s,isPinnedSection=false){
   const title=s.title||'Untitled session';
   const tags=(s.project_tags||'').split(',').filter(Boolean);
   const dot=s.status==='active'?'bg-green-500':s.status==='busy'?'bg-yellow-500':'bg-[#334155]';
+  const historyOnly=s.kind==='history-only';
   const pinned=pinnedIds.has(sid);
   const note=s.note||'';
   const tagHtml=tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
-  const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#334155] ml-1">✦</span>':'';
+  const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#94a3b8] ml-1">✦</span>':'';
 
   return `<div class="scard px-4 py-3 fade-in" id="card-${sid}" data-sid="${sid}" onclick="toggleCard('${sid}')">
     <div class="flex items-start gap-3">
       <div class="w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${dot}"></div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 justify-between">
-          <span class="text-white text-[14px] font-medium leading-snug truncate">${esc(title)}${methodBadge}</span>
+          <span class="flex items-center gap-1 min-w-0" id="title-wrap-${sid}">
+            <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(title)}${methodBadge}${historyOnly?' <span class="text-[10px] text-[#94a3b8] border border-[#2d2d4d] rounded px-1.5 py-0.5 ml-1">prompts only</span>':''}</span>
+            <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(title).replace(/'/g,"\\'")}')" title="Rename">✎</button>
+          </span>
           <div class="flex items-center gap-2 shrink-0 ml-2">
             ${note?`<span class="text-[10px] text-[#f59e0b]" title="${esc(note)}">✎</span>`:''}
             <button class="pin-btn text-[14px] ${pinned?'pinned':''}" onclick="event.stopPropagation();togglePin('${sid}')" title="${pinned?'Unpin':'Pin'}">${pinned?'📌':'📍'}</button>
           </div>
         </div>
-        <div class="flex items-center gap-2 text-[12px] text-[#475569] mt-0.5">
+        <div class="flex items-center gap-2 text-[12px] text-[#94a3b8] mt-0.5">
           <span>${relTime(s.started_at)}</span><span>·</span>
           <span>${s.msg_count||0} msgs</span><span>·</span>
           <span class="font-mono text-[11px]">${sid.slice(0,8)}</span>
@@ -395,6 +480,7 @@ function renderCard(s,isPinnedSection=false){
 
 // ── Expand card ────────────────────────────────────────────────────────────
 async function toggleCard(sid){
+  if(window.getSelection().toString().length>0)return;
   const card=document.getElementById('card-'+sid);
   const detail=document.getElementById('detail-'+sid);
   if(!detail.classList.contains('hidden')){
@@ -408,50 +494,10 @@ async function toggleCard(sid){
   expandedSession=sid;card.classList.add('expanded');
   fetch('/api/view/'+sid,{method:'POST'});
 
-  if(detail.innerHTML.trim()){detail.classList.remove('hidden');return;}
-  detail.innerHTML='<div class="text-[#334155] text-sm animate-pulse">Loading…</div>';
+  if(detail.dataset.loaded){detail.classList.remove('hidden');return;}
+  detail.dataset.loaded='1';
   detail.classList.remove('hidden');
-
-  const [msgs,note,related]=await Promise.all([
-    fetch('/api/session/'+sid).then(r=>r.json()),
-    api('/api/note/'+sid),
-    api('/api/related/'+sid),
-  ]);
-
-  const noteVal=note.note||'';
-  const relHtml=related.length?`
-    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
-      <div class="text-[11px] text-[#334155] mb-2">Related sessions</div>
-      <div class="flex flex-wrap gap-2">
-        ${related.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
-      </div>
-    </div>`:'';
-
-  const convHtml=msgs.map(m=>{
-    if(m.tool_name&&!m.content_text)return`<div class="msg-tool pl-3 py-1"><span class="text-[#f59e0b] text-[10px] font-bold font-mono mr-2">TOOL</span><span class="text-[#64748b] text-[12px]">${esc(m.tool_name)}</span></div>`;
-    const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
-    const text=(m.content_text||'').trim().slice(0,600);
-    const more=(m.content_text||'').length>600?`<span class="text-[#334155]"> …more</span>`:'';
-    return`<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${esc(text)}${more}</span></div>`;
-  }).join('');
-
-  detail.innerHTML=`
-    <div class="flex items-center gap-2 mb-3">
-      <button onclick="exportSession('${sid}')" class="text-[12px] text-[#475569] hover:text-white border border-[#23233a] rounded-lg px-3 py-1 transition-colors">↓ Export .md</button>
-      <button onclick="openNote('${sid}')" class="text-[12px] text-[#475569] hover:text-white border border-[#23233a] rounded-lg px-3 py-1 transition-colors" id="note-btn-${sid}">${noteVal?'✎ Edit note':'+ Add note'}</button>
-    </div>
-    <div id="note-editor-${sid}" class="hidden mb-3">
-      <textarea class="note-area" id="note-text-${sid}" placeholder="Add a note about this session…">${esc(noteVal)}</textarea>
-      <div class="flex gap-2 mt-1.5">
-        <button onclick="saveNote('${sid}')" class="text-[12px] text-white px-3 py-1 rounded-lg" style="background:#4f46e5">Save</button>
-        <button onclick="closeNote('${sid}')" class="text-[12px] text-[#475569] hover:text-white px-3 py-1 rounded-lg border border-[#23233a]">Cancel</button>
-      </div>
-    </div>
-    <div id="note-display-${sid}" class="${noteVal?'':'hidden'} mb-3 bg-[#1a1a10] border border-[#2d2a10] rounded-lg px-3 py-2 text-[#fbbf24] text-[12px]">
-      ${esc(noteVal)}
-    </div>
-    <div class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">${convHtml}</div>
-    ${relHtml}`;
+  await renderDetail(detail, sid);
 }
 
 // ── Notes ──────────────────────────────────────────────────────────────────
@@ -484,10 +530,147 @@ async function togglePin(sid){
   renderSessions();
 }
 
+// ── Inline rename ─────────────────────────────────────────────────────────
+function startRename(sid, currentTitle){
+  const wrap=document.getElementById('title-wrap-'+sid);
+  if(!wrap)return;
+  wrap.innerHTML=`
+    <input class="title-edit-input" id="rename-input-${sid}"
+      value="${esc(currentTitle)}"
+      onclick="event.stopPropagation()"
+      onkeydown="handleRenameKey(event,'${sid}')"
+      onblur="cancelRename('${sid}','${esc(currentTitle).replace(/'/g,"\\'")}')" />`;
+  const input=document.getElementById('rename-input-'+sid);
+  input?.focus(); input?.select();
+}
+
+function handleRenameKey(e, sid){
+  if(e.key==='Enter'){ e.preventDefault(); saveRename(sid); }
+  if(e.key==='Escape'){ e.preventDefault(); e.target.blur(); }
+}
+
+async function saveRename(sid){
+  const input=document.getElementById('rename-input-'+sid);
+  if(!input)return;
+  const newTitle=input.value.trim();
+  if(!newTitle){cancelRename(sid,'');return;}
+  const res=await fetch('/api/rename/'+sid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newTitle})});
+  const data=await res.json();
+  if(data.ok){
+    // Update in allSessions so the card re-renders correctly
+    const s=allSessions.find(s=>s.session_id===sid);
+    if(s) s.title=newTitle;
+    // Update the DOM directly (faster than full re-render)
+    const wrap=document.getElementById('title-wrap-'+sid);
+    if(wrap) wrap.innerHTML=`
+      <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(newTitle)} <span class="text-[10px] text-[#94a3b8] ml-1">✏</span></span>
+      <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(newTitle).replace(/'/g,"\\'")}')" title="Rename">✎</button>`;
+  }
+}
+
+function cancelRename(sid, originalTitle){
+  const wrap=document.getElementById('title-wrap-'+sid);
+  if(!wrap||!wrap.querySelector('input'))return;
+  wrap.innerHTML=`
+    <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(originalTitle)}</span>
+    <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(originalTitle).replace(/'/g,"\\'")}')" title="Rename">✎</button>`;
+}
+
 // ── Export ─────────────────────────────────────────────────────────────────
 function exportSession(sid){
   const a=document.createElement('a');
   a.href='/api/export/'+sid;a.click();
+}
+
+// ── Shared detail renderer (used by both Browse and Search) ────────────────
+async function renderDetail(detailEl, sid){
+  detailEl.innerHTML='<div class="text-[#94a3b8] text-sm animate-pulse pt-2">Loading…</div>';
+
+  const [msgs, note, related] = await Promise.all([
+    fetch('/api/session/'+sid).then(r=>r.json()),
+    api('/api/note/'+sid),
+    api('/api/related/'+sid),
+  ]);
+
+  const noteVal = note.note||'';
+  const relHtml = related.length ? `
+    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
+      <div class="text-[11px] text-[#94a3b8] mb-2">Related sessions</div>
+      <div class="flex flex-wrap gap-2">
+        ${related.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
+      </div>
+    </div>` : '';
+
+  // Check if this is a history-only session (prompts only, no responses)
+  const isHistoryOnly = msgs.length > 0 && msgs.every(m => m.role === 'user' && !m.tool_name);
+  const countEl = document.getElementById('detail-msgcount-'+sid);
+  if(countEl) countEl.textContent = msgs.length + ' messages';
+  const historyBanner = isHistoryOnly
+    ? `<div class="mb-3 text-[12px] text-[#94a3b8] bg-[#1a1a2e] border border-[#2d2d4d] rounded-lg px-3 py-2">
+        This session predates transcript saving — only your prompts are available, not Claude's responses.
+       </div>` : '';
+
+  const convHtml = msgs.map(m=>{
+    // Tool call (assistant decided to use a tool)
+    if(m.tool_name && !m.content_text)
+      return `<div class="msg-tool pl-3 py-1"><span class="text-[#f59e0b] text-[10px] font-bold font-mono mr-2">TOOL</span><span class="text-[#94a3b8] text-[12px]">${esc(m.tool_name)}</span></div>`;
+    // Tool result (what the tool returned — was wrongly shown as YOU before)
+    if(m.role==='tool_result'){
+      const out=(m.content_text||'').trim().slice(0,200);
+      const more=(m.content_text||'').length>200?`<span class="text-[#94a3b8]"> …</span>`:'';
+      return `<div class="msg-tool pl-3 py-1"><span class="text-[#94a3b8] text-[10px] font-bold font-mono mr-2">OUT </span><span class="text-[#94a3b8] text-[12px] font-mono leading-relaxed">${esc(out)}${more}</span></div>`;
+    }
+    const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+    const text=(m.content_text||'').trim().slice(0,600);
+    const more=(m.content_text||'').length>600?`<span class="text-[#94a3b8]"> …more</span>`:'';
+    return `<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${esc(text)}${more}</span></div>`;
+  }).join('');
+
+  detailEl.innerHTML = `
+    <div class="flex items-center gap-2 mb-3 pt-1">
+      <span class="text-[#64748b] text-[12px] mr-2" id="detail-msgcount-${sid}"></span>      <button onclick="exportSession('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded-lg px-3 py-1 transition-colors font-medium">↓ Export .md</button>
+      <button onclick="openNote('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded-lg px-3 py-1 transition-colors" id="note-btn-${sid}">${noteVal?'✎ Edit note':'+ Add note'}</button>
+    </div>
+    <div id="note-editor-${sid}" class="hidden mb-3">
+      <textarea class="note-area" id="note-text-${sid}" placeholder="Add a note about this session…">${esc(noteVal)}</textarea>
+      <div class="flex gap-2 mt-1.5">
+        <button onclick="saveNote('${sid}')" class="text-[12px] text-white px-3 py-1 rounded-lg" style="background:#4f46e5">Save</button>
+        <button onclick="closeNote('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white px-3 py-1 rounded-lg border border-[#23233a]">Cancel</button>
+      </div>
+    </div>
+    <div id="note-display-${sid}" class="${noteVal?'':'hidden'} mb-3 bg-[#1a1a10] border border-[#2d2a10] rounded-lg px-3 py-2 text-[#fbbf24] text-[12px]">${esc(noteVal)}</div>
+    ${historyBanner}
+    <div class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">${convHtml}</div>
+    ${relHtml}`;
+}
+
+// ── Toggle search result card (separate IDs from browse cards) ─────────────
+let expandedSearchSession = null;
+async function toggleSearchCard(sid){
+  if(window.getSelection().toString().length>0)return;
+  const card   = document.getElementById('sr-card-'+sid);
+  const detail = document.getElementById('sr-detail-'+sid);
+  if(!detail) return;
+
+  if(!detail.classList.contains('hidden')){
+    detail.classList.add('hidden');
+    card?.classList.remove('expanded');
+    expandedSearchSession = null;
+    return;
+  }
+  // Collapse previously expanded search card
+  if(expandedSearchSession && expandedSearchSession !== sid){
+    document.getElementById('sr-detail-'+expandedSearchSession)?.classList.add('hidden');
+    document.getElementById('sr-card-'+expandedSearchSession)?.classList.remove('expanded');
+  }
+  expandedSearchSession = sid;
+  card?.classList.add('expanded');
+  fetch('/api/view/'+sid, {method:'POST'});
+
+  if(detail.dataset.loaded){detail.classList.remove('hidden');return;}
+  detail.dataset.loaded='1';
+  detail.classList.remove('hidden');
+  await renderDetail(detail, sid);
 }
 
 // ── Search mode ─────────────────────────────────────────────────────────────
@@ -579,19 +762,27 @@ async function doSearch(){
       </div>`;
     }).join('');
 
-    return`<div class="card p-4 fade-in">
+    const sSession=allSessions.find(s=>s.session_id===sid);
+    const totalMsgs=sSession?.msg_count||0;
+    const isPinned=pinnedIds.has(sid);
+    return`<div class="scard p-4 fade-in" id="sr-card-${sid}" data-sid="${sid}" onclick="toggleSearchCard('${sid}')">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-white text-[13px] font-medium">${esc(title)}</span>
+        <div class="flex items-center gap-2 flex-wrap min-w-0">
+          <span class="text-white text-[13px] font-medium truncate">${esc(title)}</span>
           ${tags}${semBadge}
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-[#334155] text-[12px]">${relTime(first?.ts)}</span>
-          <button onclick="exportSession('${sid}')" class="text-[11px] text-[#334155] hover:text-[#94a3b8] border border-[#23233a] rounded px-2 py-0.5">↓ md</button>
+        <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
+          <span class="text-[#94a3b8] text-[12px]">${relTime(first?.ts)}</span>
+          <span class="text-[#94a3b8] text-[12px]">${totalMsgs} msgs</span>
+          <button onclick="event.stopPropagation();togglePin('${sid}')" class="text-[14px] transition-colors ${isPinned?'text-[#f59e0b]':'text-[#64748b] hover:text-[#94a3b8]'} " title="${isPinned?'Unpin':'Pin'}">
+            ${isPinned?'📌':'📍'}
+          </button>
+          <button onclick="exportSession('${sid}')" class="text-[11px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded px-2 py-0.5 font-medium">↓ md</button>
         </div>
       </div>
       <div class="space-y-1.5">${msgHtml}</div>
-      ${data.msgs.length>6?`<div class="text-[#334155] text-[11px] mt-2">+${data.msgs.length-6} more</div>`:''}
+      ${data.msgs.length>6?`<div class="text-[#94a3b8] text-[11px] mt-1.5">+${data.msgs.length-6} more — click to expand full conversation</div>`:`<div class="text-[#94a3b8] text-[11px] mt-1.5">Click to expand full conversation</div>`}
+      <div id="sr-detail-${sid}" class="hidden mt-4 pt-4 border-t border-[#1e1e30]"></div>
     </div>`;
   }).join('');
 }
@@ -600,7 +791,7 @@ async function doSearch(){
 async function doSync(){
   const icon=document.getElementById('sync-icon');
   icon.classList.add('spinner');document.getElementById('sync-btn').style.pointerEvents='none';
-  try{await api('/api/sync');await Promise.all([loadStatus(),loadSessions(),loadHeatmap()]);}
+  try{await api('/api/sync');await Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);}
   finally{icon.classList.remove('spinner');document.getElementById('sync-btn').style.pointerEvents='';icon.textContent='✓';setTimeout(()=>{icon.textContent='↻';},1500);}
 }
 
@@ -651,7 +842,7 @@ document.addEventListener('keydown',e=>{
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 history.replaceState({tab:'browse',tag:null},'','#browse');
-Promise.all([loadStatus(),loadSessions(),loadHeatmap()]);
+Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);
 </script>
 </body>
 </html>

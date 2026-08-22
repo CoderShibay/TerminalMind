@@ -82,6 +82,15 @@ def _index_file(conn, jsonl_path: Path) -> int:
             content = message.get("content", "")
 
             if entry_type == "user":
+                # Detect tool result messages — they arrive as "user" role in the API
+                # but are actually the tool responding, not the human typing.
+                if isinstance(content, list):
+                    block_types = {b.get("type") for b in content if isinstance(b, dict)}
+                    if block_types == {"tool_result"}:
+                        text = _extract_text(content)
+                        if text:
+                            rows.append((uuid, session_id, ts, "tool_result", text, None, project, cwd, str(jsonl_path)))
+                        continue
                 text = _extract_text(content)
                 if text:
                     rows.append((uuid, session_id, ts, "user", text, None, project, cwd, str(jsonl_path)))

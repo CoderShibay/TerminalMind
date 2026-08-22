@@ -97,7 +97,7 @@ def api_status():
 def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
     conn = get_conn()
     sql = """
-        SELECT s.session_id, s.started_at, s.updated_at, s.status,
+        SELECT s.session_id, s.started_at, s.updated_at, s.status, s.kind,
                COUNT(m.id) as msg_count,
                MIN(m.ts) as first_msg,
                MAX(m.ts) as last_msg,
@@ -105,6 +105,9 @@ def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
         FROM claude_sessions s
         LEFT JOIN claude_messages m ON m.session_id = s.session_id
         LEFT JOIN session_titles t ON t.session_id = s.session_id
+        LEFT JOIN (SELECT session_id, COUNT(*) as prompt_count
+                   FROM claude_prompts GROUP BY session_id) p
+                  ON p.session_id = s.session_id
     """
     params = []
     if tag:
@@ -114,7 +117,14 @@ def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        # For history-only sessions, use prompt_count as msg_count
+        if not d["msg_count"] and d.get("kind") == "history-only":
+            d["msg_count"] = d.get("prompt_count", 0)
+        result.append(d)
+    return result
 
 
 @app.get("/api/session/{session_id}")
@@ -128,7 +138,17 @@ def api_session_detail(session_id: str):
            ORDER BY ts ASC""",
         (session_id,),
     ).fetchall()
-    return [dict(m) for m in messages]
+
+    if messages:
+        return [dict(m) for m in messages]
+
+    # History-only session — return prompts formatted as messages
+    prompts = conn.execute(
+        """SELECT prompt_text as content_text, ts, 'user' as role, NULL as tool_name
+           FROM claude_prompts WHERE session_id = ? ORDER BY ts ASC""",
+        (session_id,),
+    ).fetchall()
+    return [dict(p) for p in prompts]
 
 
 @app.get("/api/tags")
@@ -231,6 +251,73 @@ def api_search(
         })
 
     return results
+
+
+@app.post("/api/rename/{session_id}")
+def api_rename(session_id: str, body: dict):
+    conn = get_conn()
+    title = body.get("title", "").strip()
+    if not title:
+        return {"ok": False, "error": "empty title"}
+    conn.execute(
+        """INSERT OR REPLACE INTO session_titles
+           (session_id, title, summary, project_tags, generated_at, method)
+           VALUES (?,?, COALESCE((SELECT summary FROM session_titles WHERE session_id=?), ''),
+                   COALESCE((SELECT project_tags FROM session_titles WHERE session_id=?), ''),
+                   ?, 'manual')""",
+        (session_id, title, session_id, session_id, int(time.time()*1000))
+    )
+    conn.commit()
+    return {"ok": True, "title": title}
+
+
+@app.get("/api/stats")
+def api_stats():
+    conn = get_conn()
+    from datetime import datetime, timedelta
+
+    def since(days):
+        return (datetime.now() - timedelta(days=days)).isoformat()
+
+    def session_stats(cutoff_iso):
+        # Sessions started since cutoff
+        sess = conn.execute(
+            """SELECT COUNT(*) FROM claude_sessions WHERE datetime(started_at/1000,'unixepoch') >= ?""",
+            (cutoff_iso,)
+        ).fetchone()[0]
+        # Messages since cutoff
+        msgs = conn.execute(
+            """SELECT COUNT(*) FROM claude_messages
+               WHERE ts >= ? AND role='user'""",
+            (cutoff_iso,)
+        ).fetchone()[0]
+        # Top project tag
+        top = conn.execute(
+            """SELECT t.project_tags FROM session_titles t
+               JOIN claude_sessions s ON s.session_id = t.session_id
+               WHERE datetime(s.started_at/1000,'unixepoch') >= ?
+                 AND t.project_tags IS NOT NULL AND t.project_tags != ''
+               ORDER BY s.started_at DESC LIMIT 20""",
+            (cutoff_iso,)
+        ).fetchall()
+        tag_counts = {}
+        for row in top:
+            for tag in (row["project_tags"] or "").split(","):
+                tag = tag.strip()
+                if tag:
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        top_tag = max(tag_counts, key=tag_counts.get) if tag_counts else None
+        return {"sessions": sess, "messages": msgs, "top_project": top_tag}
+
+    return {
+        "week":  session_stats(since(7)),
+        "month": session_stats(since(30)),
+        "all":   {
+            "sessions": conn.execute("SELECT COUNT(*) FROM claude_sessions").fetchone()[0],
+            "messages": conn.execute("SELECT COUNT(*) FROM claude_messages WHERE role='user'").fetchone()[0],
+            "prompts":  conn.execute("SELECT COUNT(*) FROM claude_prompts").fetchone()[0],
+        }
+    }
 
 
 @app.post("/api/pin/{session_id}")

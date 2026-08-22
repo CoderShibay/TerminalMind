@@ -203,7 +203,7 @@ def generate_for_session(conn, session_id: str, use_ollama: bool = True) -> dict
     if existing:
         return dict(existing)
 
-    # Load messages for this session
+    # Load messages — fall back to prompts for history-only sessions
     messages = conn.execute(
         """SELECT role, content_text FROM claude_messages
            WHERE session_id = ? AND content_text IS NOT NULL
@@ -211,6 +211,16 @@ def generate_for_session(conn, session_id: str, use_ollama: bool = True) -> dict
         (session_id,),
     ).fetchall()
     messages = [dict(m) for m in messages]
+
+    if not messages:
+        # History-only session — use prompts as the content
+        prompts = conn.execute(
+            """SELECT 'user' as role, prompt_text as content_text
+               FROM claude_prompts WHERE session_id = ?
+               ORDER BY ts ASC LIMIT 10""",
+            (session_id,),
+        ).fetchall()
+        messages = [dict(p) for p in prompts]
 
     tags = _detect_tags(messages)
 

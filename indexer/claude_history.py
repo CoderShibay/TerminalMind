@@ -59,7 +59,6 @@ def run(conn) -> int:
         rows,
     )
 
-    # Rebuild FTS for prompts (simple full rebuild — fast enough at this scale)
     conn.execute("INSERT INTO prompts_fts(prompts_fts) VALUES('rebuild')")
 
     conn.execute(
@@ -68,4 +67,43 @@ def run(conn) -> int:
         (str(HISTORY_PATH), stat.st_size, stat.st_mtime, int(time.time() * 1000)),
     )
     conn.commit()
+
+    # Create synthetic session records for sessions that exist in history.jsonl
+    # but have no corresponding transcript file (older sessions)
+    _backfill_sessions(conn)
+
     return len(rows)
+
+
+def _project_label(path: str | None) -> str | None:
+    if not path:
+        return None
+    for part in reversed(path.rstrip("/").split("/")):
+        if part and part not in ("Users", "alisyed", "Documents", ""):
+            return part
+    return None
+
+
+def _backfill_sessions(conn) -> None:
+    """Create session records from history.jsonl for sessions with no transcript."""
+    orphaned = conn.execute(
+        """SELECT p.session_id,
+                  MIN(p.ts) as started_at,
+                  MAX(p.ts) as updated_at,
+                  p.project
+           FROM claude_prompts p
+           LEFT JOIN claude_sessions s ON s.session_id = p.session_id
+           WHERE s.session_id IS NULL
+           GROUP BY p.session_id"""
+    ).fetchall()
+
+    for row in orphaned:
+        label = _project_label(row["project"])
+        conn.execute(
+            """INSERT OR IGNORE INTO claude_sessions
+               (session_id, pid, cwd, project, started_at, updated_at, status, version, kind)
+               VALUES (?, NULL, ?, ?, ?, ?, 'ended', NULL, 'history-only')""",
+            (row["session_id"], row["project"], label,
+             row["started_at"], row["updated_at"]),
+        )
+    conn.commit()
