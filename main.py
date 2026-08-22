@@ -9,6 +9,12 @@ Usage:
     tm status                        Active sessions + DB stats
     tm search <query> [--last Nd]    Full-text search across all conversations
     tm sessions [--project NAME]     List Claude Code sessions
+    tm digest                        Morning briefing — pinned, today, yesterday, week stats
+    tm report                        Project activity report with bar charts
+    tm report --days 7               Report for last 7 days (default: 30)
+    tm history                       Chronological session timeline
+    tm history --project NAME        Filter by project
+    tm history --days 14             Last 14 days only
     tm service install               Auto-start server on login (macOS/Linux)
     tm service uninstall             Remove auto-start
     tm service status                Check if background service is running
@@ -20,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
 from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder
-from cli import search, sessions, status, verify, today, context
+from cli import search, sessions, status, verify, today, context, digest, report, history
 
 HELP = __doc__
 
@@ -82,6 +88,18 @@ def main():
     elif cmd == "context":
         sync(conn, verbose=False, embed=False)
         context.run(conn, rest)
+
+    elif cmd == "digest":
+        sync(conn, verbose=False, embed=False)
+        digest.run(conn, rest)
+
+    elif cmd == "report":
+        sync(conn, verbose=False, embed=False)
+        report.run(conn, rest)
+
+    elif cmd == "history":
+        sync(conn, verbose=False, embed=False)
+        history.run(conn, rest)
 
     elif cmd == "today":
         sync(conn, verbose=False)
