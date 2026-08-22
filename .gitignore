@@ -1,0 +1,10 @@
+db/terminalmd.db
+db/terminalmd.db-shm
+db/terminalmd.db-wal
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.DS_Store
+*.log

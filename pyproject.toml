@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "terminalmd"
+version = "0.1.0"
+description = "Search and browse your Claude Code conversation history"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["claude", "claude-code", "ai", "terminal", "search", "history"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]
+
+[project.scripts]
+tm = "terminalmd.main:main"
+
+[project.urls]
+Homepage = "https://github.com/CoderShibay/terminalmd"
+Issues   = "https://github.com/CoderShibay/terminalmd/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["terminalmd*"]
+
+[tool.setuptools.package-data]
+terminalmd = ["db/schema.sql", "dashboard.html"]
