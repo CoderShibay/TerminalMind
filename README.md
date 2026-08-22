@@ -81,6 +81,92 @@ tm service status                     # check if running
 
 ---
 
+## Use Cases
+
+### Debugging a past issue
+You tried to fix something two weeks ago. You remember it involved a timeout error but not the details.
+```bash
+tm context "timeout error" --full
+# → gets the actual error, the code, and what was tried
+# → paste into Claude to fix it properly this time
+```
+
+### Picking up a project after a break
+You haven't touched SpotTrader in a week. You don't remember where you left off.
+```bash
+tm today --yesterday        # see what you worked on
+tm sessions                 # find the SpotTrader session
+tm context "SpotTrader strategy implementation" --full
+# → Claude knows exactly where you stopped
+```
+
+### Finding a past architectural decision
+You remember deciding something about the database schema but not what or why.
+```bash
+tm search "database schema"          # browse results in dashboard
+tm context "database schema decision" # extract for Claude
+```
+
+### Avoiding repeating solved problems
+You're about to ask Claude to do something. You suspect it was already done.
+```bash
+tm context "topic you're about to ask about"
+# → if the answer is there, paste it. Save the tokens.
+```
+
+### Recovering code that was written and lost
+You had working code in a past session that was never saved to a file.
+```bash
+tm context "the feature name" --full
+# → finds the assistant messages where the code was written
+# → copy it out
+```
+
+### Understanding what you actually did this week
+```bash
+tm today
+tm today --yesterday
+# → sessions, titles, message counts, time ranges
+```
+
+### Annotating important sessions so you can find them later
+You just had a session where a key architectural decision was made.
+- Open dashboard → find the session → click to expand → **+ Add note**
+- Write: *"This is where we decided to use STAPLE instead of majority voting"*
+- Now it's searchable and shows on the card permanently
+
+### Pinning reference sessions
+Some sessions are permanent references — the one where you designed the system, the one with the working pipeline command.
+- Hover any card → click 📍 → it stays at the top of Browse forever
+- Works from search results too
+
+### Finding sessions from a specific day
+You remember working intensively on something last Thursday.
+- Click that Thursday cell in the heatmap
+- Browse filters instantly to just that day's sessions
+
+### Passing complete context to a new Claude session
+You want to continue complex work in a fresh session without copy-pasting manually.
+```bash
+tm context "the specific problem" --session ID_8CHARS --full
+# → auto-copied to clipboard
+# → open new Claude session → paste → continue
+```
+
+### Sharing context across AI tools
+The output of `tm context` is plain text — paste it into any AI: Claude, ChatGPT, Gemini, a local model. It's not Claude-specific.
+
+### Verifying everything is indexed
+After a crash or first install, check nothing is missing.
+```bash
+tm verify
+# → shows files on disk vs files in DB
+# → flags any sessions without titles
+# → reports Ollama status
+```
+
+---
+
 ## Claude Integration
 
 TerminalMind is designed to work with Claude Code sessions, not just as a standalone tool.
