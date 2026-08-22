@@ -6,38 +6,42 @@
 <title>TerminalMind</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { background:#0d0d12; color:#e2e8f0; font-family:'Inter',system-ui,sans-serif; }
-  .card { background:#14141f; border:1px solid #23233a; border-radius:12px; }
-  .session-card { background:#14141f; border:1px solid #23233a; border-radius:10px; transition:border-color 0.15s,background 0.15s; cursor:pointer; }
-  .session-card:hover { border-color:#4f46e5; background:#17172a; }
-  .session-card.expanded { border-color:#4f46e5; }
-  .tag { display:inline-flex; align-items:center; background:#1e1e35; border:1px solid #2d2d4d; border-radius:99px; font-size:11px; padding:2px 9px; color:#94a3b8; }
-  .tag.active { background:#3730a3; border-color:#4f46e5; color:#c7d2fe; }
-  mark { background:#fbbf2430; color:#fcd34d; border-radius:2px; padding:0 2px; }
-  input:focus,textarea:focus { outline:none; border-color:#4f46e5; }
-  ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:transparent; }
-  ::-webkit-scrollbar-thumb { background:#2d2d4d; border-radius:4px; }
-  .msg-user { border-left:2px solid #4f46e5; }
-  .msg-asst { border-left:2px solid #22c55e; }
-  .msg-tool { border-left:2px solid #f59e0b; }
-  .fade-in { animation:fadeIn 0.18s ease; }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:translateY(0)} }
-  .dot-active { background:#22c55e; }
-  .dot-idle   { background:#475569; }
-  .dot-busy   { background:#f59e0b; }
-  .date-group { position:sticky; top:0; z-index:5; backdrop-filter:blur(12px); }
-  .spinner { animation:spin 0.8s linear infinite; }
-  @keyframes spin { to{transform:rotate(360deg)} }
-  .tab-btn { padding:6px 16px; border-radius:7px; font-size:13px; color:#64748b; cursor:pointer; transition:all 0.12s; }
-  .tab-btn.on { background:#14141f; color:#e2e8f0; border:1px solid #23233a; }
-  .tab-btn:hover:not(.on) { color:#cbd5e1; }
+  body{background:#0d0d12;color:#e2e8f0;font-family:'Inter',system-ui,sans-serif;}
+  .card{background:#14141f;border:1px solid #23233a;border-radius:12px;}
+  .scard{background:#14141f;border:1px solid #23233a;border-radius:10px;transition:border-color .15s,background .15s;cursor:pointer;}
+  .scard:hover{border-color:#4f46e5;background:#17172a;}
+  .scard.expanded{border-color:#4f46e5;background:#17172a;}
+  .scard.focused{outline:2px solid #4f46e5;outline-offset:1px;}
+  .tag{display:inline-flex;align-items:center;background:#1e1e35;border:1px solid #2d2d4d;border-radius:99px;font-size:11px;padding:2px 9px;color:#94a3b8;}
+  .tag.active{background:#3730a3;border-color:#4f46e5;color:#c7d2fe;}
+  mark{background:#fbbf2430;color:#fcd34d;border-radius:2px;padding:0 2px;}
+  input:focus,textarea:focus{outline:none;border-color:#4f46e5;}
+  ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#2d2d4d;border-radius:4px;}
+  .msg-user{border-left:2px solid #4f46e5;}
+  .msg-asst{border-left:2px solid #22c55e;}
+  .msg-tool{border-left:2px solid #f59e0b;}
+  .fade-in{animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+  .spinner{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tab-btn{padding:6px 16px;border-radius:7px;font-size:13px;color:#64748b;cursor:pointer;transition:all .12s;}
+  .tab-btn.on{background:#14141f;color:#e2e8f0;border:1px solid #23233a;}
+  .tab-btn:hover:not(.on){color:#cbd5e1;}
+  .heat-cell{border-radius:2px;transition:opacity .1s;}
+  .heat-cell:hover{opacity:.7;}
+  .pin-btn{opacity:0;transition:opacity .15s;}
+  .scard:hover .pin-btn,.scard.expanded .pin-btn{opacity:1;}
+  .pin-btn.pinned{opacity:1;color:#f59e0b;}
+  .note-area{background:#0d0d12;border:1px solid #23233a;border-radius:7px;color:#e2e8f0;font-size:13px;resize:vertical;width:100%;padding:8px 10px;min-height:60px;}
+  .note-area:focus{border-color:#4f46e5;}
+  .kbd{background:#1e1e30;border:1px solid #2d2d4d;border-radius:4px;font-size:10px;padding:1px 5px;color:#64748b;}
 </style>
 </head>
 <body class="min-h-screen">
 
 <!-- Header -->
-<div class="sticky top-0 z-20 border-b border-[#1e1e30] px-6 py-3 flex items-center gap-4" style="background:#0d0d12cc;backdrop-filter:blur(16px)">
-  <button onclick="goHome()" class="flex items-center gap-2.5 mr-2 hover:opacity-80 transition-opacity">
+<div class="sticky top-0 z-20 border-b border-[#1e1e30] px-6 py-3 flex items-center gap-3" style="background:#0d0d12cc;backdrop-filter:blur(16px)">
+  <button onclick="goHome()" class="flex items-center gap-2 mr-3 hover:opacity-80 transition-opacity shrink-0">
     <div class="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold" style="background:#4f46e5">⚡</div>
     <span class="font-semibold text-[15px] text-white">TerminalMind</span>
   </button>
@@ -45,29 +49,29 @@
     <button onclick="setTab('browse')" id="tab-browse" class="tab-btn on">Browse</button>
     <button onclick="setTab('search')" id="tab-search" class="tab-btn">Search</button>
   </div>
-  <div class="flex items-center gap-4 ml-auto">
+  <div class="flex items-center gap-2 ml-auto flex-wrap">
     <div id="tag-bar" class="flex gap-1.5 flex-wrap items-center">
-      <button id="clear-filter-btn" onclick="clearFilter()" class="hidden text-[11px] text-[#475569] hover:text-[#94a3b8] border border-[#23233a] rounded-md px-2 py-0.5 transition-colors">✕ clear filter</button>
+      <button id="clear-filter-btn" onclick="clearFilter()" class="hidden text-[11px] text-[#475569] hover:text-[#94a3b8] border border-[#23233a] rounded-md px-2 py-0.5">✕ clear</button>
     </div>
     <button onclick="doSync()" id="sync-btn" class="flex items-center gap-1.5 text-[12px] text-[#475569] hover:text-[#94a3b8] transition-colors">
       <span id="sync-icon" class="text-[14px]">↻</span> Sync
     </button>
-    <div id="db-pill" class="text-[11px] text-[#334155] font-mono"></div>
+    <div id="db-pill" class="text-[11px] text-[#2d2d4d] font-mono"></div>
   </div>
 </div>
 
 <!-- Browse Tab -->
 <div id="pane-browse" class="px-6 py-5 max-w-4xl mx-auto">
 
-  <!-- Stats row -->
-  <div class="grid grid-cols-3 gap-3 mb-6">
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-prompts">—</div>
-      <div class="text-[12px] text-[#475569]">prompts sent</div>
+      <div class="text-[12px] text-[#475569]">prompts</div>
     </div>
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-messages">—</div>
-      <div class="text-[12px] text-[#475569]">messages total</div>
+      <div class="text-[12px] text-[#475569]">messages</div>
     </div>
     <div class="card px-4 py-3 flex items-center gap-3">
       <div class="text-2xl font-bold text-white" id="s-sessions">—</div>
@@ -75,9 +79,37 @@
     </div>
   </div>
 
+  <!-- Activity heatmap -->
+  <div class="card p-4 mb-5">
+    <div class="text-[12px] text-[#475569] mb-3 flex items-center justify-between">
+      <span>Activity <span class="text-[#334155]">(last 52 weeks)</span></span>
+      <span id="heatmap-legend" class="flex items-center gap-1 text-[11px] text-[#334155]">less <span class="flex gap-0.5" id="heat-legend-cells"></span> more</span>
+    </div>
+    <div id="heatmap" class="overflow-x-auto"></div>
+  </div>
+
+  <!-- Pinned sessions -->
+  <div id="pinned-section" class="hidden mb-5">
+    <div class="text-[11px] font-semibold uppercase tracking-widest text-[#475569] mb-2 flex items-center gap-2">
+      <span>📌 Pinned</span>
+    </div>
+    <div id="pinned-list" class="space-y-1.5"></div>
+  </div>
+
   <!-- Session list -->
   <div id="session-list" class="space-y-1"></div>
   <div id="empty-state" class="hidden text-center text-[#334155] py-16 text-sm">No sessions match this filter.</div>
+
+  <!-- Keyboard hint -->
+  <div class="text-center text-[11px] text-[#23233a] mt-6 pb-4">
+    <kbd class="kbd">j</kbd> / <kbd class="kbd">k</kbd> navigate &nbsp;·&nbsp;
+    <kbd class="kbd">space</kbd> expand &nbsp;·&nbsp;
+    <kbd class="kbd">p</kbd> pin &nbsp;·&nbsp;
+    <kbd class="kbd">n</kbd> note &nbsp;·&nbsp;
+    <kbd class="kbd">e</kbd> export &nbsp;·&nbsp;
+    <kbd class="kbd">/</kbd> search &nbsp;·&nbsp;
+    <kbd class="kbd">esc</kbd> home
+  </div>
 </div>
 
 <!-- Search Tab -->
@@ -93,9 +125,11 @@
         <option value="7d">Last 7 days</option>
         <option value="30d">Last 30 days</option>
       </select>
-      <button onclick="doSearch()" class="px-5 py-2.5 rounded-lg text-sm font-medium text-white" style="background:#4f46e5">Search</button>
+      <button onclick="doSearch()" class="px-5 py-2.5 rounded-lg text-sm font-medium text-white shrink-0" style="background:#4f46e5">Search</button>
     </div>
-    <div class="mt-2 text-[12px] text-[#334155]">Press <kbd class="bg-[#1e1e30] px-1.5 py-0.5 rounded text-[11px]">/</kbd> to focus • <kbd class="bg-[#1e1e30] px-1.5 py-0.5 rounded text-[11px]">Enter</kbd> to search</div>
+    <div class="mt-2 text-[12px] text-[#334155]">
+      <kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> back
+    </div>
   </div>
   <div id="search-status" class="text-[#475569] text-sm mb-4 min-h-[20px]"></div>
   <div id="search-results" class="space-y-3"></div>
@@ -103,341 +137,438 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let allSessions = [];
-let activeTag = null;
-let expandedSession = null;
+let allSessions=[], activeTag=null, expandedSession=null;
+let focusedIdx=-1;  // keyboard nav index into visible cards
+let pinnedIds=new Set();
 
 // ── Utils ──────────────────────────────────────────────────────────────────
-const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const fmt = n => Number(n||0).toLocaleString();
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmt=n=>Number(n||0).toLocaleString();
+const api=(url,opts)=>fetch(url,opts).then(r=>r.json());
 
-function relTime(ts) {
-  if (!ts) return '?';
-  const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
-  const diff = Date.now() - d;
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
-  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
-  if (diff < 172800000) return 'yesterday';
+function relTime(ts){
+  if(!ts)return'?';
+  const d=typeof ts==='number'?new Date(ts):new Date(ts);
+  const diff=Date.now()-d;
+  if(diff<60000)return'just now';
+  if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+  if(diff<172800000)return'yesterday';
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 }
-
-function dayLabel(ts) {
-  if (!ts) return 'Unknown';
-  const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
-  const now = new Date();
-  const diff = now - d;
-  if (diff < 86400000 && now.getDate() === d.getDate()) return 'Today';
-  if (diff < 172800000) return 'Yesterday';
-  const days = Math.floor(diff / 86400000);
-  if (days < 7) return 'This Week';
-  if (days < 30) return 'Last Month';
+function dayLabel(ts){
+  if(!ts)return'Unknown';
+  const d=typeof ts==='number'?new Date(ts):new Date(ts);
+  const now=new Date(), diff=now-d;
+  if(diff<86400000&&now.getDate()===d.getDate())return'Today';
+  if(diff<172800000)return'Yesterday';
+  if(diff<604800000)return'This Week';
+  if(diff<2592000000)return'Last Month';
   return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
 }
-
-function highlight(text, query) {
-  if (!query || !text) return esc(text||'');
-  let result = esc(text);
-  query.trim().split(/\s+/).filter(Boolean).forEach(term => {
-    const re = new RegExp('('+esc(term).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
-    result = result.replace(re,'<mark>$1</mark>');
+function highlight(text,query){
+  if(!query||!text)return esc(text||'');
+  let r=esc(text);
+  query.trim().split(/\s+/).filter(Boolean).forEach(t=>{
+    const re=new RegExp('('+esc(t).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    r=r.replace(re,'<mark>$1</mark>');
   });
-  return result;
+  return r;
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-function setTab(name, pushHistory=true) {
-  ['browse','search'].forEach(t => {
-    document.getElementById('pane-'+t).classList.toggle('hidden', t!==name);
-    document.getElementById('tab-'+t).classList.toggle('on', t===name);
+function setTab(name,push=true){
+  ['browse','search'].forEach(t=>{
+    document.getElementById('pane-'+t).classList.toggle('hidden',t!==name);
+    document.getElementById('tab-'+t).classList.toggle('on',t===name);
   });
-  if (name==='search') setTimeout(()=>document.getElementById('q').focus(),50);
-  if (pushHistory) history.pushState({tab:name, tag:activeTag}, '', '#'+name);
+  if(name==='search')setTimeout(()=>document.getElementById('q').focus(),50);
+  if(push)history.pushState({tab:name,tag:activeTag},'','#'+name);
 }
-
-function goHome() {
+function goHome(){
   clearFilter(false);
-  if (expandedSession) {
+  if(expandedSession){
     document.getElementById('detail-'+expandedSession)?.classList.add('hidden');
     document.getElementById('card-'+expandedSession)?.classList.remove('expanded');
-    expandedSession = null;
+    expandedSession=null;
   }
+  focusedIdx=-1;
   setTab('browse');
-  window.scrollTo({top:0, behavior:'smooth'});
+  window.scrollTo({top:0,behavior:'smooth'});
 }
-
-function clearFilter(rerender=true) {
-  activeTag = null;
-  document.querySelectorAll('.tag').forEach(el => el.classList.remove('active'));
-  document.getElementById('clear-filter-btn').classList.add('hidden');
-  if (rerender) renderSessions();
-}
-
-// Browser back/forward
-window.addEventListener('popstate', e => {
-  const state = e.state || {tab:'browse', tag:null};
-  if (state.tag !== activeTag) {
-    activeTag = state.tag;
-    document.querySelectorAll('.tag').forEach(el => el.classList.remove('active'));
-    if (activeTag) document.getElementById('tag-'+activeTag)?.classList.add('active');
-    document.getElementById('clear-filter-btn').classList.toggle('hidden', !activeTag);
-    renderSessions();
-  }
-  setTab(state.tab || 'browse', false);
+window.addEventListener('popstate',e=>{
+  const s=e.state||{tab:'browse',tag:null};
+  if(s.tag!==activeTag){activeTag=s.tag;document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);renderSessions();}
+  setTab(s.tab||'browse',false);
 });
 
-// ── Tag filter bar ─────────────────────────────────────────────────────────
-async function loadTags() {
-  const tags = await fetch('/api/tags').then(r=>r.json());
-  const bar = document.getElementById('tag-bar');
-  bar.innerHTML = tags.map(t=>`
-    <button onclick="filterTag('${esc(t.tag)}')" id="tag-${esc(t.tag)}"
-      class="tag">${esc(t.tag)} <span class="text-[#334155] ml-1">${t.count}</span></button>
-  `).join('');
+// ── Tags ───────────────────────────────────────────────────────────────────
+async function loadTags(){
+  const tags=await api('/api/tags');
+  const bar=document.getElementById('tag-bar');
+  const existing=bar.querySelector('#clear-filter-btn');
+  bar.innerHTML='';
+  if(existing)bar.appendChild(existing);
+  tags.forEach(t=>{
+    const btn=document.createElement('button');
+    btn.onclick=()=>filterTag(t.tag);
+    btn.id='tag-'+t.tag;
+    btn.className='tag';
+    btn.innerHTML=`${esc(t.tag)} <span class="text-[#334155] ml-1">${t.count}</span>`;
+    bar.appendChild(btn);
+  });
+  bar.appendChild(existing||document.getElementById('clear-filter-btn'));
 }
-
-function filterTag(tag) {
-  activeTag = activeTag === tag ? null : tag;
-  document.querySelectorAll('.tag').forEach(el => el.classList.remove('active'));
-  if (activeTag) document.getElementById('tag-'+activeTag)?.classList.add('active');
-  document.getElementById('clear-filter-btn').classList.toggle('hidden', !activeTag);
-  history.pushState({tab:'browse', tag:activeTag}, '', '#browse');
+function filterTag(tag){
+  activeTag=activeTag===tag?null:tag;
+  document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));
+  if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');
+  document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);
+  history.pushState({tab:'browse',tag:activeTag},'','#browse');
   renderSessions();
 }
-
-// ── Status + sessions load ─────────────────────────────────────────────────
-async function loadStatus() {
-  const d = await fetch('/api/status').then(r=>r.json());
-  document.getElementById('s-prompts').textContent  = fmt(d.total_prompts);
-  document.getElementById('s-messages').textContent = fmt(d.total_messages);
-  document.getElementById('s-sessions').textContent = fmt(d.total_sessions);
-  document.getElementById('db-pill').textContent    = d.db_size_kb + ' KB';
+function clearFilter(rerender=true){
+  activeTag=null;
+  document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));
+  document.getElementById('clear-filter-btn').classList.add('hidden');
+  if(rerender)renderSessions();
 }
 
-async function loadSessions() {
-  allSessions = await fetch('/api/sessions?limit=500').then(r=>r.json());
+// ── Status + sessions ──────────────────────────────────────────────────────
+async function loadStatus(){
+  const d=await api('/api/status');
+  document.getElementById('s-prompts').textContent=fmt(d.total_prompts);
+  document.getElementById('s-messages').textContent=fmt(d.total_messages);
+  document.getElementById('s-sessions').textContent=fmt(d.total_sessions);
+  document.getElementById('db-pill').textContent=d.db_size_kb+' KB';
+}
+async function loadSessions(){
+  [allSessions]=await Promise.all([api('/api/sessions?limit=500')]);
+  const pins=await api('/api/pins');
+  pinnedIds=new Set(pins.map(p=>p.session_id));
   renderSessions();
+  renderPinned(pins);
   loadTags();
 }
 
-// ── Render session cards ───────────────────────────────────────────────────
-function renderSessions() {
-  const list = document.getElementById('session-list');
-  const empty = document.getElementById('empty-state');
+// ── Heatmap ────────────────────────────────────────────────────────────────
+async function loadHeatmap(){
+  const data=await api('/api/activity');
+  const byDay={};
+  data.forEach(r=>{ byDay[r.day]=r.count; });
 
-  let sessions = allSessions;
-  if (activeTag) {
-    sessions = sessions.filter(s => (s.project_tags||'').includes(activeTag));
-  }
+  const today=new Date();
+  const WEEKS=52;
+  // start from Sunday 52 weeks ago
+  const startDate=new Date(today);
+  startDate.setDate(startDate.getDate()-WEEKS*7-startDate.getDay());
 
-  if (!sessions.length) {
-    list.innerHTML = '';
-    empty.classList.remove('hidden');
-    return;
+  const maxCount=Math.max(...Object.values(byDay),1);
+  const levels=['#1a1a2e','#1e1e6e','#3730a3','#4f46e5','#818cf8'];
+
+  // Build 7×52 grid (rows=days of week, cols=weeks)
+  const grid=document.getElementById('heatmap');
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  const W=10, GAP=2, LABEL=14;
+  svg.setAttribute('width',(WEEKS*(W+GAP)+LABEL)+'px');
+  svg.setAttribute('height',(7*(W+GAP)+16)+'px');
+
+  const dayNames=['S','M','T','W','T','F','S'];
+  [1,3,5].forEach(d=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x','0'); t.setAttribute('y',(d*(W+GAP)+W)+'px');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#334155');
+    t.textContent=dayNames[d]; svg.appendChild(t);
+  });
+
+  const months={};
+  for(let w=0;w<WEEKS;w++){
+    for(let d=0;d<7;d++){
+      const date=new Date(startDate);
+      date.setDate(startDate.getDate()+w*7+d);
+      if(date>today)continue;
+      const key=date.toISOString().slice(0,10);
+      const count=byDay[key]||0;
+      const level=count===0?0:Math.min(4,Math.ceil(count/maxCount*4));
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x',(LABEL+w*(W+GAP))+'px');
+      rect.setAttribute('y',(d*(W+GAP))+'px');
+      rect.setAttribute('width',W); rect.setAttribute('height',W);
+      rect.setAttribute('rx','2'); rect.setAttribute('fill',levels[level]);
+      rect.setAttribute('title',`${key}: ${count} messages`);
+      svg.appendChild(rect);
+      const m=date.toLocaleString('en-GB',{month:'short'});
+      if(!months[m]&&d===0)months[m]=w;
+    }
   }
+  // Month labels
+  Object.entries(months).forEach(([m,w])=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',(LABEL+w*(W+GAP))+'px');
+    t.setAttribute('y',(7*(W+GAP)+14)+'px');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#475569');
+    t.textContent=m; svg.appendChild(t);
+  });
+
+  grid.innerHTML=''; grid.appendChild(svg);
+
+  // Legend cells
+  document.getElementById('heat-legend-cells').innerHTML=
+    levels.map(c=>`<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c}"></span>`).join('');
+}
+
+// ── Pinned section ─────────────────────────────────────────────────────────
+function renderPinned(pins){
+  const sec=document.getElementById('pinned-section');
+  const list=document.getElementById('pinned-list');
+  if(!pins.length){sec.classList.add('hidden');return;}
+  sec.classList.remove('hidden');
+  list.innerHTML=pins.map(p=>renderCard(p,true)).join('');
+}
+
+// ── Session cards ──────────────────────────────────────────────────────────
+function renderSessions(){
+  const list=document.getElementById('session-list');
+  const empty=document.getElementById('empty-state');
+  let sessions=allSessions.filter(s=>!pinnedIds.has(s.session_id));
+  if(activeTag)sessions=sessions.filter(s=>(s.project_tags||'').includes(activeTag));
+  if(!sessions.length){list.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
 
-  // Group by day label
-  const groups = {};
-  sessions.forEach(s => {
-    const g = dayLabel(s.started_at);
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(s);
-  });
+  const groups={};
+  sessions.forEach(s=>{const g=dayLabel(s.started_at);if(!groups[g])groups[g]=[];groups[g].push(s);});
+  const ORDER=['Today','Yesterday','This Week','Last Month'];
+  const sorted=Object.keys(groups).sort((a,b)=>{const ia=ORDER.indexOf(a),ib=ORDER.indexOf(b);if(ia!==-1&&ib!==-1)return ia-ib;if(ia!==-1)return -1;if(ib!==-1)return 1;return 0;});
 
-  const ORDER = ['Today','Yesterday','This Week','Last Month'];
-  const sorted = Object.keys(groups).sort((a,b) => {
-    const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return 0;
-  });
+  list.innerHTML=sorted.map(g=>`
+    <div class="mb-5">
+      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#334155] py-2 mb-1.5 sticky top-[52px] z-10" style="background:#0d0d12cc;backdrop-filter:blur(8px)">${esc(g)}</div>
+      <div class="space-y-1.5">${groups[g].map(s=>renderCard(s)).join('')}</div>
+    </div>`).join('');
+  focusedIdx=-1;
+}
 
-  list.innerHTML = sorted.map(group => `
-    <div class="mb-6">
-      <div class="date-group text-[11px] font-semibold uppercase tracking-widest text-[#334155] py-2 mb-2" style="background:#0d0d12cc">
-        ${esc(group)}
-      </div>
-      <div class="space-y-1.5">
-        ${groups[group].map(s => renderCard(s)).join('')}
+function renderCard(s,isPinnedSection=false){
+  const sid=s.session_id;
+  const title=s.title||'Untitled session';
+  const tags=(s.project_tags||'').split(',').filter(Boolean);
+  const dot=s.status==='active'?'bg-green-500':s.status==='busy'?'bg-yellow-500':'bg-[#334155]';
+  const pinned=pinnedIds.has(sid);
+  const note=s.note||'';
+  const tagHtml=tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
+  const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#334155] ml-1">✦</span>':'';
+
+  return `<div class="scard px-4 py-3 fade-in" id="card-${sid}" data-sid="${sid}" onclick="toggleCard('${sid}')">
+    <div class="flex items-start gap-3">
+      <div class="w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${dot}"></div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 justify-between">
+          <span class="text-white text-[14px] font-medium leading-snug truncate">${esc(title)}${methodBadge}</span>
+          <div class="flex items-center gap-2 shrink-0 ml-2">
+            ${note?`<span class="text-[10px] text-[#f59e0b]" title="${esc(note)}">✎</span>`:''}
+            <button class="pin-btn text-[14px] ${pinned?'pinned':''}" onclick="event.stopPropagation();togglePin('${sid}')" title="${pinned?'Unpin':'Pin'}">${pinned?'📌':'📍'}</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-[12px] text-[#475569] mt-0.5">
+          <span>${relTime(s.started_at)}</span><span>·</span>
+          <span>${s.msg_count||0} msgs</span><span>·</span>
+          <span class="font-mono text-[11px]">${sid.slice(0,8)}</span>
+        </div>
+        ${tagHtml?`<div class="flex gap-1.5 mt-1.5 flex-wrap">${tagHtml}</div>`:''}
       </div>
     </div>
-  `).join('');
+    <div id="detail-${sid}" class="hidden mt-4 pt-4 border-t border-[#1e1e30]"></div>
+  </div>`;
 }
 
-function renderCard(s) {
-  const sid = s.session_id;
-  const title = s.title || 'Untitled session';
-  const summary = s.summary || '';
-  const tags = (s.project_tags||'').split(',').filter(Boolean);
-  const statusDot = s.status === 'active' ? 'dot-active' : s.status === 'busy' ? 'dot-busy' : 'dot-idle';
-  const msgs = s.msg_count || 0;
-  const when = relTime(s.started_at);
-  const methodBadge = s.method === 'ollama'
-    ? '<span class="text-[10px] text-[#334155] ml-1">✦</span>' : '';
-
-  const tagHtml = tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
-
-  return `
-    <div class="session-card px-4 py-3.5 fade-in" id="card-${sid}" onclick="toggleCard('${sid}')">
-      <div class="flex items-start gap-3">
-        <div class="w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${statusDot}"></div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-0.5">
-            <span class="text-white text-[14px] font-medium leading-snug">${esc(title)}${methodBadge}</span>
-          </div>
-          <div class="flex items-center gap-3 text-[12px] text-[#475569]">
-            <span>${when}</span>
-            <span>·</span>
-            <span>${msgs} messages</span>
-            <span>·</span>
-            <span class="font-mono text-[11px]">${sid.slice(0,8)}</span>
-          </div>
-          ${tagHtml ? `<div class="flex gap-1.5 mt-1.5">${tagHtml}</div>` : ''}
-        </div>
-      </div>
-      <div id="detail-${sid}" class="hidden mt-4 pt-4 border-t border-[#1e1e30]"></div>
-    </div>`;
-}
-
-// ── Expand / collapse session detail ──────────────────────────────────────
-async function toggleCard(sid) {
-  const card = document.getElementById('card-'+sid);
-  const detail = document.getElementById('detail-'+sid);
-
-  if (!detail.classList.contains('hidden')) {
-    detail.classList.add('hidden');
-    card.classList.remove('expanded');
-    return;
+// ── Expand card ────────────────────────────────────────────────────────────
+async function toggleCard(sid){
+  const card=document.getElementById('card-'+sid);
+  const detail=document.getElementById('detail-'+sid);
+  if(!detail.classList.contains('hidden')){
+    detail.classList.add('hidden');card.classList.remove('expanded');
+    if(expandedSession===sid)expandedSession=null;return;
   }
-
-  // Close previously expanded
-  if (expandedSession && expandedSession !== sid) {
+  if(expandedSession&&expandedSession!==sid){
     document.getElementById('detail-'+expandedSession)?.classList.add('hidden');
     document.getElementById('card-'+expandedSession)?.classList.remove('expanded');
   }
-  expandedSession = sid;
-  card.classList.add('expanded');
+  expandedSession=sid;card.classList.add('expanded');
+  fetch('/api/view/'+sid,{method:'POST'});
 
-  if (detail.innerHTML.trim()) {
-    detail.classList.remove('hidden');
-    return;
-  }
-
-  detail.innerHTML = '<div class="text-[#334155] text-sm animate-pulse">Loading…</div>';
+  if(detail.innerHTML.trim()){detail.classList.remove('hidden');return;}
+  detail.innerHTML='<div class="text-[#334155] text-sm animate-pulse">Loading…</div>';
   detail.classList.remove('hidden');
 
-  const msgs = await fetch(`/api/session/${sid}`).then(r=>r.json());
+  const [msgs,note,related]=await Promise.all([
+    fetch('/api/session/'+sid).then(r=>r.json()),
+    api('/api/note/'+sid),
+    api('/api/related/'+sid),
+  ]);
 
-  if (!msgs.length) {
-    detail.innerHTML = '<div class="text-[#334155] text-sm">No messages found.</div>';
-    return;
-  }
+  const noteVal=note.note||'';
+  const relHtml=related.length?`
+    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
+      <div class="text-[11px] text-[#334155] mb-2">Related sessions</div>
+      <div class="flex flex-wrap gap-2">
+        ${related.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
+      </div>
+    </div>`:'';
 
-  detail.innerHTML = '<div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">' +
-    msgs.map(m => {
-      if (m.tool_name && !m.content_text) {
-        return `<div class="msg-tool pl-3 py-1">
-          <span class="text-[#f59e0b] text-[10px] font-bold font-mono mr-2">TOOL</span>
-          <span class="text-[#64748b] text-[12px]">${esc(m.tool_name)}</span>
-        </div>`;
-      }
-      const isUser = m.role === 'user';
-      const cls = isUser ? 'msg-user' : 'msg-asst';
-      const label = isUser ? 'YOU' : 'ASST';
-      const color = isUser ? 'text-[#818cf8]' : 'text-[#4ade80]';
-      const text = (m.content_text||'').trim().slice(0,600);
-      const more = (m.content_text||'').length > 600 ? `<span class="text-[#334155]"> …${(m.content_text.length-600)} more chars</span>` : '';
-      return `<div class="${cls} pl-3 py-1.5">
-        <div class="flex items-baseline gap-2">
-          <span class="${color} text-[10px] font-bold font-mono shrink-0">${label}</span>
-          <span class="text-[#cbd5e1] text-[12px] leading-relaxed">${esc(text)}${more}</span>
-        </div>
-      </div>`;
-    }).join('') +
-  '</div>';
+  const convHtml=msgs.map(m=>{
+    if(m.tool_name&&!m.content_text)return`<div class="msg-tool pl-3 py-1"><span class="text-[#f59e0b] text-[10px] font-bold font-mono mr-2">TOOL</span><span class="text-[#64748b] text-[12px]">${esc(m.tool_name)}</span></div>`;
+    const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+    const text=(m.content_text||'').trim().slice(0,600);
+    const more=(m.content_text||'').length>600?`<span class="text-[#334155]"> …more</span>`:'';
+    return`<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${esc(text)}${more}</span></div>`;
+  }).join('');
+
+  detail.innerHTML=`
+    <div class="flex items-center gap-2 mb-3">
+      <button onclick="exportSession('${sid}')" class="text-[12px] text-[#475569] hover:text-white border border-[#23233a] rounded-lg px-3 py-1 transition-colors">↓ Export .md</button>
+      <button onclick="openNote('${sid}')" class="text-[12px] text-[#475569] hover:text-white border border-[#23233a] rounded-lg px-3 py-1 transition-colors" id="note-btn-${sid}">${noteVal?'✎ Edit note':'+ Add note'}</button>
+    </div>
+    <div id="note-editor-${sid}" class="hidden mb-3">
+      <textarea class="note-area" id="note-text-${sid}" placeholder="Add a note about this session…">${esc(noteVal)}</textarea>
+      <div class="flex gap-2 mt-1.5">
+        <button onclick="saveNote('${sid}')" class="text-[12px] text-white px-3 py-1 rounded-lg" style="background:#4f46e5">Save</button>
+        <button onclick="closeNote('${sid}')" class="text-[12px] text-[#475569] hover:text-white px-3 py-1 rounded-lg border border-[#23233a]">Cancel</button>
+      </div>
+    </div>
+    <div id="note-display-${sid}" class="${noteVal?'':'hidden'} mb-3 bg-[#1a1a10] border border-[#2d2a10] rounded-lg px-3 py-2 text-[#fbbf24] text-[12px]">
+      ${esc(noteVal)}
+    </div>
+    <div class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">${convHtml}</div>
+    ${relHtml}`;
+}
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+function openNote(sid){
+  document.getElementById('note-editor-'+sid)?.classList.remove('hidden');
+  document.getElementById('note-text-'+sid)?.focus();
+}
+function closeNote(sid){
+  document.getElementById('note-editor-'+sid)?.classList.add('hidden');
+}
+async function saveNote(sid){
+  const text=document.getElementById('note-text-'+sid)?.value||'';
+  await fetch('/api/note/'+sid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:text})});
+  closeNote(sid);
+  const display=document.getElementById('note-display-'+sid);
+  const btn=document.getElementById('note-btn-'+sid);
+  if(text){display.innerHTML=esc(text);display.classList.remove('hidden');if(btn)btn.textContent='✎ Edit note';}
+  else{display.classList.add('hidden');if(btn)btn.textContent='+ Add note';}
+  // Refresh sessions to update note indicator
+  await loadSessions();
+}
+
+// ── Pin ────────────────────────────────────────────────────────────────────
+async function togglePin(sid){
+  const res=await fetch('/api/pin/'+sid,{method:'POST'}).then(r=>r.json());
+  if(res.pinned)pinnedIds.add(sid);else pinnedIds.delete(sid);
+  const pins=await api('/api/pins');
+  pinnedIds=new Set(pins.map(p=>p.session_id));
+  renderPinned(pins);
+  renderSessions();
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportSession(sid){
+  const a=document.createElement('a');
+  a.href='/api/export/'+sid;a.click();
 }
 
 // ── Search ─────────────────────────────────────────────────────────────────
-async function doSearch() {
-  const q = document.getElementById('q').value.trim();
-  const last = document.getElementById('q-time').value;
-  if (!q) { document.getElementById('search-status').textContent = 'Enter a query.'; return; }
-
-  document.getElementById('search-status').textContent = 'Searching…';
-  document.getElementById('search-results').innerHTML = '';
-
-  const params = new URLSearchParams({q, last, limit:60});
-  const results = await fetch('/api/search?'+params).then(r=>r.json());
-
-  if (!results.length) {
-    document.getElementById('search-status').textContent = `No results for "${q}"`;
-    return;
-  }
-  document.getElementById('search-status').textContent = `${results.length} result(s) for "${q}"`;
-
-  // Group by session
-  const bySession = {};
-  results.forEach(r => { if(!bySession[r.session_id]) bySession[r.session_id]=[]; bySession[r.session_id].push(r); });
-
-  document.getElementById('search-results').innerHTML = Object.entries(bySession).map(([sid,msgs]) => {
-    const first = msgs[0];
-    const session = allSessions.find(s=>s.session_id===sid);
-    const title = session?.title || sid.slice(0,8)+'…';
-    const tags = (session?.project_tags||'').split(',').filter(Boolean).map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
-
-    const msgHtml = msgs.slice(0,6).map(m => {
-      const isUser = m.role==='user';
-      const cls = isUser ? 'msg-user' : 'msg-asst';
-      const label = isUser ? 'YOU' : 'ASST';
-      const color = isUser ? 'text-[#818cf8]' : 'text-[#4ade80]';
-      return `<div class="${cls} pl-3 py-1.5">
-        <span class="${color} text-[10px] font-bold font-mono mr-2">${label}</span>
-        <span class="text-[#cbd5e1] text-[12px] leading-relaxed">${highlight(m.text.slice(0,360), q)}</span>
-      </div>`;
+async function doSearch(){
+  const q=document.getElementById('q').value.trim();
+  const last=document.getElementById('q-time').value;
+  if(!q){document.getElementById('search-status').textContent='Enter a query.';return;}
+  document.getElementById('search-status').textContent='Searching…';
+  document.getElementById('search-results').innerHTML='';
+  const results=await api('/api/search?'+new URLSearchParams({q,last,limit:60}));
+  if(!results.length){document.getElementById('search-status').textContent=`No results for "${q}"`;return;}
+  document.getElementById('search-status').textContent=`${results.length} result(s) for "${q}"`;
+  const bySession={};
+  results.forEach(r=>{if(!bySession[r.session_id])bySession[r.session_id]=[];bySession[r.session_id].push(r);});
+  document.getElementById('search-results').innerHTML=Object.entries(bySession).map(([sid,msgs])=>{
+    const first=msgs[0];
+    const session=allSessions.find(s=>s.session_id===sid);
+    const title=session?.title||sid.slice(0,8)+'…';
+    const tags=(session?.project_tags||'').split(',').filter(Boolean).map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
+    const msgHtml=msgs.slice(0,6).map(m=>{
+      const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+      return`<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${highlight(m.text.slice(0,360),q)}</span></div>`;
     }).join('');
-
-    return `<div class="card p-4 fade-in">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-white text-[13px] font-medium">${esc(title)}</span>
-          ${tags}
+    return`<div class="card p-4 fade-in">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap"><span class="text-white text-[13px] font-medium">${esc(title)}</span>${tags}</div>
+        <div class="flex items-center gap-2">
+          <span class="text-[#334155] text-[12px]">${relTime(first.ts)}</span>
+          <button onclick="exportSession('${sid}')" class="text-[11px] text-[#334155] hover:text-[#94a3b8] border border-[#23233a] rounded px-2 py-0.5">↓ md</button>
         </div>
-        <span class="text-[#334155] text-[12px] shrink-0 ml-3">${relTime(first.ts)}</span>
       </div>
       <div class="space-y-1.5">${msgHtml}</div>
-      ${msgs.length>6?`<div class="text-[#334155] text-[11px] mt-2">+ ${msgs.length-6} more in this session</div>`:''}
+      ${msgs.length>6?`<div class="text-[#334155] text-[11px] mt-2">+${msgs.length-6} more</div>`:''}
     </div>`;
   }).join('');
 }
 
 // ── Sync ───────────────────────────────────────────────────────────────────
-async function doSync() {
-  const icon = document.getElementById('sync-icon');
-  icon.classList.add('spinner');
-  document.getElementById('sync-btn').style.pointerEvents = 'none';
-  try {
-    await fetch('/api/sync');
-    await Promise.all([loadStatus(), loadSessions()]);
-  } finally {
-    icon.classList.remove('spinner');
-    document.getElementById('sync-btn').style.pointerEvents = '';
-    icon.textContent = '✓';
-    setTimeout(()=>{ icon.textContent='↻'; }, 1500);
-  }
+async function doSync(){
+  const icon=document.getElementById('sync-icon');
+  icon.classList.add('spinner');document.getElementById('sync-btn').style.pointerEvents='none';
+  try{await api('/api/sync');await Promise.all([loadStatus(),loadSessions(),loadHeatmap()]);}
+  finally{icon.classList.remove('spinner');document.getElementById('sync-btn').style.pointerEvents='';icon.textContent='✓';setTimeout(()=>{icon.textContent='↻';},1500);}
 }
 
-// ── Keyboard ───────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key==='/' && e.target.tagName!=='INPUT') { e.preventDefault(); setTab('search'); }
-  if (e.key==='Escape') { setTab('browse'); }
+// ── Keyboard navigation ────────────────────────────────────────────────────
+function visibleCards(){
+  return [...document.querySelectorAll('#session-list .scard, #pinned-list .scard')];
+}
+function setFocus(idx){
+  const cards=visibleCards();
+  if(!cards.length)return;
+  focusedIdx=Math.max(0,Math.min(idx,cards.length-1));
+  cards.forEach((c,i)=>c.classList.toggle('focused',i===focusedIdx));
+  cards[focusedIdx].scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+document.addEventListener('keydown',e=>{
+  const inInput=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA';
+  if(e.key==='/'&&!inInput){e.preventDefault();setTab('search');return;}
+  if(e.key==='Escape'){if(!inInput){goHome();}return;}
+  if(inInput)return;
+
+  const pane=document.getElementById('pane-browse');
+  if(pane.classList.contains('hidden'))return;
+
+  const cards=visibleCards();
+  if(e.key==='j'||e.key==='ArrowDown'){e.preventDefault();setFocus(focusedIdx<0?0:focusedIdx+1);}
+  else if(e.key==='k'||e.key==='ArrowUp'){e.preventDefault();setFocus(Math.max(0,focusedIdx-1));}
+  else if((e.key===' '||e.key==='Enter')&&focusedIdx>=0){
+    e.preventDefault();
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)toggleCard(sid);
+  }
+  else if(e.key==='p'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)togglePin(sid);
+  }
+  else if(e.key==='n'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid){
+      if(!expandedSession||expandedSession!==sid)toggleCard(sid).then(()=>openNote(sid));
+      else openNote(sid);
+    }
+  }
+  else if(e.key==='e'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)exportSession(sid);
+  }
 });
 
 // ── Boot ───────────────────────────────────────────────────────────────────
-// Seed initial history state so back button has somewhere to go
-history.replaceState({tab:'browse', tag:null}, '', '#browse');
-Promise.all([loadStatus(), loadSessions()]);
+history.replaceState({tab:'browse',tag:null},'','#browse');
+Promise.all([loadStatus(),loadSessions(),loadHeatmap()]);
 </script>
 </body>
 </html>

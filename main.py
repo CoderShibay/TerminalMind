@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
 from indexer import claude_history, claude_sessions, claude_transcripts, title_engine
-from cli import search, sessions, status, verify
+from cli import search, sessions, status, verify, today
 
 HELP = __doc__
 
@@ -73,6 +73,10 @@ def main():
     elif cmd == "search":
         sync(conn, verbose=False)
         search.run(conn, rest)
+
+    elif cmd == "today":
+        sync(conn, verbose=False)
+        today.run(conn, rest)
 
     elif cmd == "sessions":
         sync(conn, verbose=False)

@@ -58,6 +58,26 @@ CREATE VIRTUAL TABLE IF NOT EXISTS prompts_fts USING fts5(
     content_rowid='id'
 );
 
+-- Pinned sessions
+CREATE TABLE IF NOT EXISTS session_pins (
+    session_id  TEXT PRIMARY KEY,
+    pinned_at   INTEGER NOT NULL
+);
+
+-- Per-session user notes
+CREATE TABLE IF NOT EXISTS session_notes (
+    session_id  TEXT PRIMARY KEY,
+    note        TEXT NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+
+-- Session view history (for "recently viewed")
+CREATE TABLE IF NOT EXISTS session_views (
+    id          INTEGER PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    viewed_at   INTEGER NOT NULL
+);
+
 -- Generated titles and summaries per session (cached, computed once)
 CREATE TABLE IF NOT EXISTS session_titles (
     session_id   TEXT PRIMARY KEY,

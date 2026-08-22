@@ -1,5 +1,6 @@
 """FastAPI server for TerminalMind dashboard — `tm serve`."""
 import threading
+import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -210,6 +211,175 @@ def api_search(
         })
 
     return results
+
+
+@app.post("/api/pin/{session_id}")
+def api_pin(session_id: str):
+    conn = get_conn()
+    existing = conn.execute("SELECT 1 FROM session_pins WHERE session_id=?", (session_id,)).fetchone()
+    if existing:
+        conn.execute("DELETE FROM session_pins WHERE session_id=?", (session_id,))
+        conn.commit()
+        return {"pinned": False}
+    else:
+        conn.execute("INSERT OR REPLACE INTO session_pins (session_id, pinned_at) VALUES (?,?)",
+                     (session_id, int(time.time()*1000)))
+        conn.commit()
+        return {"pinned": True}
+
+
+@app.get("/api/pins")
+def api_pins():
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT s.session_id, s.started_at, s.status,
+                  COUNT(m.id) as msg_count,
+                  t.title, t.project_tags, p.pinned_at,
+                  n.note
+           FROM session_pins p
+           JOIN claude_sessions s ON s.session_id = p.session_id
+           LEFT JOIN claude_messages m ON m.session_id = s.session_id
+           LEFT JOIN session_titles t ON t.session_id = s.session_id
+           LEFT JOIN session_notes n ON n.session_id = s.session_id
+           GROUP BY s.session_id
+           ORDER BY p.pinned_at DESC"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/note/{session_id}")
+def api_note_save(session_id: str, body: dict):
+    conn = get_conn()
+    note = body.get("note", "").strip()
+    if note:
+        conn.execute(
+            "INSERT OR REPLACE INTO session_notes (session_id, note, updated_at) VALUES (?,?,?)",
+            (session_id, note, int(time.time()*1000))
+        )
+    else:
+        conn.execute("DELETE FROM session_notes WHERE session_id=?", (session_id,))
+    conn.commit()
+    return {"ok": True}
+
+
+@app.get("/api/note/{session_id}")
+def api_note_get(session_id: str):
+    conn = get_conn()
+    row = conn.execute("SELECT note FROM session_notes WHERE session_id=?", (session_id,)).fetchone()
+    return {"note": row["note"] if row else ""}
+
+
+@app.get("/api/activity")
+def api_activity():
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT substr(ts, 1, 10) as day, COUNT(*) as count
+           FROM claude_messages
+           WHERE role='user' AND ts IS NOT NULL AND ts != ''
+           GROUP BY day
+           ORDER BY day ASC"""
+    ).fetchall()
+    return [{"day": r["day"], "count": r["count"]} for r in rows]
+
+
+@app.get("/api/related/{session_id}")
+def api_related(session_id: str):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT project_tags FROM session_titles WHERE session_id=?", (session_id,)
+    ).fetchone()
+    if not row or not row["project_tags"]:
+        return []
+    tags = [t.strip() for t in row["project_tags"].split(",") if t.strip()]
+    if not tags:
+        return []
+    # Find sessions sharing at least one tag, excluding current
+    results = []
+    seen = set()
+    for tag in tags:
+        rows = conn.execute(
+            """SELECT s.session_id, s.started_at, t.title, t.project_tags,
+                      COUNT(m.id) as msg_count
+               FROM session_titles t
+               JOIN claude_sessions s ON s.session_id = t.session_id
+               LEFT JOIN claude_messages m ON m.session_id = s.session_id
+               WHERE t.project_tags LIKE ? AND t.session_id != ?
+               GROUP BY s.session_id
+               ORDER BY s.started_at DESC
+               LIMIT 5""",
+            (f"%{tag}%", session_id)
+        ).fetchall()
+        for r in rows:
+            if r["session_id"] not in seen:
+                seen.add(r["session_id"])
+                results.append(dict(r))
+    return results[:4]
+
+
+@app.get("/api/export/{session_id}")
+def api_export(session_id: str):
+    from fastapi.responses import Response
+    conn = get_conn()
+    title_row = conn.execute(
+        "SELECT title, project_tags FROM session_titles WHERE session_id=?", (session_id,)
+    ).fetchone()
+    note_row = conn.execute(
+        "SELECT note FROM session_notes WHERE session_id=?", (session_id,)
+    ).fetchone()
+    session_row = conn.execute(
+        "SELECT started_at FROM claude_sessions WHERE session_id=?", (session_id,)
+    ).fetchone()
+    messages = conn.execute(
+        """SELECT role, content_text, tool_name, ts FROM claude_messages
+           WHERE session_id=? AND (content_text IS NOT NULL OR tool_name IS NOT NULL)
+           ORDER BY ts ASC""",
+        (session_id,)
+    ).fetchall()
+
+    title = (title_row["title"] if title_row else None) or session_id[:8]
+    tags  = title_row["project_tags"] if title_row else ""
+    note  = note_row["note"] if note_row else ""
+
+    ts = session_row["started_at"] if session_row else None
+    date_str = ""
+    if ts:
+        try:
+            date_str = datetime.fromtimestamp(ts/1000).strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            pass
+
+    lines = [f"# {title}", ""]
+    if date_str: lines += [f"**Date:** {date_str}", ""]
+    if tags:     lines += [f"**Tags:** {tags}", ""]
+    if note:     lines += [f"**Note:** {note}", ""]
+    lines += ["---", ""]
+
+    for msg in messages:
+        if msg["tool_name"] and not msg["content_text"]:
+            lines += [f"> `[tool: {msg['tool_name']}]`", ""]
+            continue
+        role  = "**You**" if msg["role"] == "user" else "**Claude**"
+        text  = (msg["content_text"] or "").strip()
+        lines += [f"{role}", "", text, ""]
+
+    md = "\n".join(lines)
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)[:50]
+    return Response(
+        content=md,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'}
+    )
+
+
+@app.post("/api/view/{session_id}")
+def api_view(session_id: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO session_views (session_id, viewed_at) VALUES (?,?)",
+        (session_id, int(time.time()*1000))
+    )
+    conn.commit()
+    return {"ok": True}
 
 
 @app.get("/api/sync")
