@@ -22,51 +22,100 @@ def _check_ollama() -> bool:
     return _ollama_ok
 
 # Keywords → project tag
+# Rules: only use SPECIFIC terms that can't appear in unrelated conversations.
+# Never use generic words like "strategy", "trading", "android", "flutter",
+# "vault", "proposal" — these fire on everything.
 PROJECT_KEYWORDS = {
+    # Segmentation — very specific medical imaging terms
     "segmentation":  "Segmentation",
     "medsam":        "Segmentation",
+    "medsam2":       "Segmentation",
     "nnunet":        "Segmentation",
     "gemma4":        "Segmentation",
     "medgemma":      "Segmentation",
     "staple":        "Segmentation",
     "wilms":         "Segmentation",
-    "tumor":         "Segmentation",
+    "nephroblastoma":"Segmentation",
+    "radiomics":     "Segmentation",
+
+    # SpotTrader — only terms that can't be about anything else
     "spottrader":    "SpotTrader",
     "bybit":         "SpotTrader",
     "binance":       "SpotTrader",
-    "crypto":        "SpotTrader",
-    "trading":       "SpotTrader",
-    "strategy":      "SpotTrader",
+    "kraken":        "SpotTrader",
+    "spot trading":  "SpotTrader",
+    "crypto bot":    "SpotTrader",
+
+    # PKB — specific
     "pkb":           "PKB",
-    "takeout":       "PKB",
-    "knowledge base":"PKB",
+    "google takeout":"PKB",
     "chromadb":      "PKB",
+    "personal knowledge": "PKB",
+
+    # DICOM App — only "dicom" is specific; flutter/android are too generic
     "dicom":         "DICOM App",
-    "flutter":       "DICOM App",
-    "android":       "DICOM App",
+    "3d slicer":     "DICOM App",
+    "pydicom":       "DICOM App",
+
+    # WikiFM — Wikipedia radio app
+    "wikifm":        "WikiFM",
+    "wikipedia fm":  "WikiFM",
+    "wikilocast":    "WikiFM",
+    "wiki fm":       "WikiFM",
+    "wikipedia radio":"WikiFM",
+    "kokoro":        "WikiFM",
+    "orpheus tts":   "WikiFM",
+
+    # HemaVision
     "hemavision":    "HemaVision",
     "hematology":    "HemaVision",
+    "blood cell":    "HemaVision",
+
+    # TerminalMind — specific enough
     "terminalmd":    "TerminalMind",
-    "terminalm":     "TerminalMind",
+    "terminalmind":  "TerminalMind",
     "tm search":     "TerminalMind",
+    "tm context":    "TerminalMind",
+    "tm serve":      "TerminalMind",
+
+    # MessageBoard
     "messageboard":  "MessageBoard",
     "message board": "MessageBoard",
-    "obsidian":      "Obsidian",
-    "vault":         "Obsidian",
+    "board.py":      "MessageBoard",
+
+    # Obsidian — only when it's specifically about vault management
+    "obsidian vault":"Obsidian",
+    "obsidian plugin":"Obsidian",
+    ".obsidian":     "Obsidian",
+
+    # CommandCenter
     "commandcenter": "CommandCenter",
+
+    # Research / grants — specific terms
     "bmrc":          "Research",
-    "proposal":      "Research",
-    "radiomics":     "Research",
+    "nicrh":         "Research",
+    "topology-guided":"Research",
+    "most grant":    "Research",
+
+    # St. Jude collaboration
     "pasha":         "St. Jude",
     "pews":          "St. Jude",
     "pact":          "St. Jude",
     "st jude":       "St. Jude",
-    "embedding":     "EmbedAlign",
+    "pediatric early warning": "St. Jude",
+
+    # EmbedAlign
     "embedalign":    "EmbedAlign",
-    "ollama":        "AI Tools",
-    "claude":        "AI Tools",
-    "python":        "Python",
-    "drive":         "Google Drive",
+    "embedding aligner": "EmbedAlign",
+
+    # AI Tools — only when specifically about the tools themselves
+    "agy":           "AI Tools",
+    "antigravity":   "AI Tools",
+    "codex cli":     "AI Tools",
+
+    # Google Drive — only when explicitly about Drive operations
+    "google drive":  "Google Drive",
+    "rclone":        "Google Drive",
 }
 
 # Patterns that indicate the message is pasted file content, not a real question

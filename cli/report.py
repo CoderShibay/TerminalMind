@@ -43,33 +43,35 @@ def run(conn, args: list[str]) -> int:
     cutoff_label = f"Last {days} days" if days != 9999 else "All time"
 
     # ── Per-project stats ─────────────────────────────────────────────────────
-    # Sessions and message counts per detected project tag
-    tag_rows = conn.execute(
-        """SELECT t.project_tags,
-                  COUNT(DISTINCT s.session_id) as session_count,
+    # Each session is counted under ALL its detected tags (a session about
+    # both Segmentation and TerminalMind appears in both). Message counts
+    # are NOT split — each project gets the full session message count.
+    session_rows = conn.execute(
+        """SELECT s.session_id, s.started_at,
                   COUNT(m.id) as msg_count,
-                  MAX(s.started_at) as last_active
-           FROM session_titles t
-           JOIN claude_sessions s ON s.session_id = t.session_id
+                  t.project_tags
+           FROM claude_sessions s
            LEFT JOIN claude_messages m ON m.session_id = s.session_id
+           LEFT JOIN session_titles t  ON t.session_id = s.session_id
            WHERE datetime(s.started_at/1000,'unixepoch') >= ?
-             AND t.project_tags IS NOT NULL AND t.project_tags != ''
-           GROUP BY s.session_id, t.project_tags""",
+           GROUP BY s.session_id""",
         (cutoff,)
     ).fetchall()
 
-    # Expand tags (sessions can have multiple)
     project_data: dict[str, dict] = {}
-    for row in tag_rows:
-        for tag in (row["project_tags"] or "").split(","):
-            tag = tag.strip()
-            if not tag:
-                continue
+    sessions_by_project: dict[str, set] = {}
+
+    for row in session_rows:
+        tags = [t.strip() for t in (row["project_tags"] or "").split(",") if t.strip()]
+        for tag in tags:
             if tag not in project_data:
                 project_data[tag] = {"sessions": 0, "messages": 0, "last_active": None}
-            project_data[tag]["sessions"] += 1
-            project_data[tag]["messages"] += row["msg_count"] or 0
-            la = row["last_active"]
+                sessions_by_project[tag] = set()
+            if row["session_id"] not in sessions_by_project[tag]:
+                sessions_by_project[tag].add(row["session_id"])
+                project_data[tag]["sessions"] += 1
+                project_data[tag]["messages"] += row["msg_count"] or 0
+            la = row["started_at"]
             if la and (not project_data[tag]["last_active"] or la > project_data[tag]["last_active"]):
                 project_data[tag]["last_active"] = la
 
