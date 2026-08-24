@@ -2,7 +2,7 @@
 import threading
 import time
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import uvicorn
@@ -530,6 +530,80 @@ def api_semantic(q: str = Query(default=""), limit: int = Query(default=30)):
                 "title":      session["title"] if session else row["session_id"][:8],
             })
     return results
+
+
+@app.get("/api/shell")
+def api_shell(
+    project: str = Query(default=""),
+    days:    int = Query(default=7),
+    failed:  bool = Query(default=False),
+    q:       str = Query(default=""),
+    limit:   int = Query(default=300),
+):
+    conn = get_conn()
+    try:
+        conn.execute("SELECT 1 FROM shell_commands LIMIT 1")
+    except Exception:
+        return {"commands": [], "total": 0, "failed_count": 0, "has_data": False}
+
+    cutoff_ms = int((datetime.now() - timedelta(days=days)).timestamp() * 1000) if days else 0
+
+    if q:
+        sql = """SELECT sc.ts, sc.duration_ms, sc.exit_code, sc.command, sc.cwd
+                 FROM shell_commands_fts fts
+                 JOIN shell_commands sc ON sc.id = fts.rowid
+                 WHERE shell_commands_fts MATCH ?"""
+        params: list = [q]
+    else:
+        sql    = "SELECT ts, duration_ms, exit_code, command, cwd FROM shell_commands WHERE 1=1"
+        params = []
+
+    if cutoff_ms:
+        sql += " AND ts >= ?"
+        params.append(cutoff_ms)
+    if project:
+        sql += " AND cwd LIKE ?"
+        params.append(f"%{project}%")
+    if failed:
+        sql += " AND exit_code != 0 AND exit_code IS NOT NULL"
+
+    sql += " ORDER BY ts DESC LIMIT ?"
+    params.append(limit)
+
+    rows = conn.execute(sql, params).fetchall()
+
+    # totals for stats bar (unfiltered except time + project)
+    count_sql    = "SELECT COUNT(*), SUM(CASE WHEN exit_code!=0 AND exit_code IS NOT NULL THEN 1 ELSE 0 END) FROM shell_commands WHERE 1=1"
+    count_params: list = []
+    if cutoff_ms:
+        count_sql += " AND ts >= ?"; count_params.append(cutoff_ms)
+    if project:
+        count_sql += " AND cwd LIKE ?"; count_params.append(f"%{project}%")
+    total_row = conn.execute(count_sql, count_params).fetchone()
+
+    return {
+        "commands":     [dict(r) for r in rows],
+        "total":        total_row[0] or 0,
+        "failed_count": total_row[1] or 0,
+        "has_data":     True,
+    }
+
+
+@app.get("/api/shell/projects")
+def api_shell_projects():
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT cwd FROM shell_commands WHERE cwd IS NOT NULL ORDER BY cwd"
+        ).fetchall()
+    except Exception:
+        return []
+    projects = {}
+    for r in rows:
+        seg = (r["cwd"] or "").rstrip("/").split("/")[-1]
+        if seg:
+            projects[seg] = True
+    return sorted(projects.keys())
 
 
 @app.get("/api/sync")

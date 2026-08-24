@@ -56,6 +56,7 @@
   <div class="flex gap-0.5">
     <button onclick="setTab('browse')" id="tab-browse" class="tab-btn on">Browse</button>
     <button onclick="setTab('search')" id="tab-search" class="tab-btn">Search</button>
+    <button onclick="setTab('shell')"  id="tab-shell"  class="tab-btn">Shell</button>
   </div>
   <div class="flex items-center gap-2 ml-auto flex-wrap">
     <div id="tag-bar" class="flex gap-1.5 flex-wrap items-center">
@@ -158,6 +159,60 @@
   </div>
 </div>
 
+<!-- Shell Tab -->
+<div id="pane-shell" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Filters -->
+  <div class="card p-4 mb-4">
+    <div class="flex gap-2 flex-wrap items-center">
+      <input id="sh-q" type="text" placeholder="Search commands…"
+        class="flex-1 min-w-[180px] bg-[#0d0d12] border border-[#23233a] rounded-lg px-4 py-2 text-white text-[14px]"
+        onkeydown="if(event.key==='Enter')loadShell()">
+      <select id="sh-days" onchange="loadShell()"
+        class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2 text-[#94a3b8] text-sm">
+        <option value="1">Today</option>
+        <option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 3 months</option>
+      </select>
+      <select id="sh-project" onchange="loadShell()"
+        class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2 text-[#94a3b8] text-sm">
+        <option value="">All projects</option>
+      </select>
+      <button id="sh-failed-btn" onclick="toggleShellFailed()"
+        class="px-3 py-2 rounded-lg text-sm border border-[#23233a] text-[#94a3b8] transition-colors">
+        Failed only
+      </button>
+      <button onclick="loadShell()"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0" style="background:#4f46e5">
+        Filter
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div id="sh-stats" class="text-[13px] text-[#94a3b8] mb-4 min-h-[20px]"></div>
+
+  <!-- Not set up -->
+  <div id="sh-setup" class="hidden text-center py-20">
+    <div class="text-[#64748b] text-sm space-y-3">
+      <div class="text-2xl mb-3">⚡</div>
+      <div class="text-white font-medium">Shell logging not active</div>
+      <div>Add to <code class="text-[#818cf8]">~/.zshrc</code> and open a new terminal:</div>
+      <code class="block bg-[#14141f] border border-[#23233a] rounded-lg px-4 py-3 text-[#a5b4fc] text-left mx-auto max-w-sm">
+        source ~/terminalmd/daemon/shell_hook.sh
+      </code>
+      <div class="text-[#64748b] text-xs mt-2">Then run <code>tm sync</code> or refresh this tab.</div>
+    </div>
+  </div>
+
+  <!-- Empty -->
+  <div id="sh-empty" class="hidden text-center py-16 text-[#64748b] text-sm">No commands found for this filter.</div>
+
+  <!-- Command list -->
+  <div id="sh-list" class="space-y-0.5 font-mono text-[13px]"></div>
+</div>
+
 <!-- Search Tab -->
 <div id="pane-search" class="px-6 py-5 max-w-4xl mx-auto hidden">
   <div class="card p-4 mb-5">
@@ -232,12 +287,121 @@ function highlight(text,query){
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 function setTab(name,push=true){
-  ['browse','search'].forEach(t=>{
+  ['browse','search','shell'].forEach(t=>{
     document.getElementById('pane-'+t).classList.toggle('hidden',t!==name);
     document.getElementById('tab-'+t).classList.toggle('on',t===name);
   });
   if(name==='search')setTimeout(()=>document.getElementById('q').focus(),50);
+  if(name==='shell')loadShell();
   if(push)history.pushState({tab:name,tag:activeTag},'','#'+name);
+}
+
+// ── Shell tab ──────────────────────────────────────────────────────────────
+let shFailedOnly=false;
+
+function toggleShellFailed(){
+  shFailedOnly=!shFailedOnly;
+  const btn=document.getElementById('sh-failed-btn');
+  btn.style.background=shFailedOnly?'#4f46e5':'';
+  btn.style.color=shFailedOnly?'#fff':'';
+  btn.style.borderColor=shFailedOnly?'#4f46e5':'';
+  loadShell();
+}
+
+async function loadShell(){
+  const q=document.getElementById('sh-q').value.trim();
+  const days=document.getElementById('sh-days').value;
+  const project=document.getElementById('sh-project').value;
+  const params=new URLSearchParams({days,failed:shFailedOnly,limit:300});
+  if(q)params.set('q',q);
+  if(project)params.set('project',project);
+
+  const data=await api('/api/shell?'+params);
+
+  const listEl=document.getElementById('sh-list');
+  const statsEl=document.getElementById('sh-stats');
+  const setupEl=document.getElementById('sh-setup');
+  const emptyEl=document.getElementById('sh-empty');
+
+  if(!data.has_data){
+    setupEl.classList.remove('hidden');
+    listEl.classList.add('hidden');
+    statsEl.textContent='';
+    emptyEl.classList.add('hidden');
+    return;
+  }
+
+  setupEl.classList.add('hidden');
+  listEl.classList.remove('hidden');
+
+  const failPct=data.total>0?Math.round(data.failed_count/data.total*100):0;
+  statsEl.innerHTML=`<span class="text-white">${fmt(data.total)}</span> commands &nbsp;·&nbsp; `+
+    `<span class="${data.failed_count>0?'text-red-400':'text-[#94a3b8]'}">${fmt(data.failed_count)} failed</span>`+
+    (data.failed_count>0?` <span class="text-[#64748b]">(${failPct}%)</span>`:'');
+
+  if(!data.commands.length){
+    emptyEl.classList.remove('hidden');
+    listEl.innerHTML='';
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  // Group by day
+  const byDay={};
+  data.commands.forEach(c=>{
+    const d=new Date(c.ts);
+    const key=d.toISOString().slice(0,10);
+    if(!byDay[key])byDay[key]=[];
+    byDay[key].push(c);
+  });
+
+  function fmtTime(ts){
+    const d=new Date(ts);
+    return d.toTimeString().slice(0,8);
+  }
+  function fmtDur(ms){
+    if(ms==null)return'';
+    if(ms<1000)return ms+'ms';
+    if(ms<60000)return(ms/1000).toFixed(1)+'s';
+    return Math.floor(ms/60000)+'m '+(Math.floor(ms/1000)%60)+'s';
+  }
+  function dayLabel(key){
+    const now=new Date(), d=new Date(key);
+    const today=now.toISOString().slice(0,10);
+    const yest=new Date(now-86400000).toISOString().slice(0,10);
+    if(key===today)return'Today';
+    if(key===yest)return'Yesterday';
+    return d.toLocaleDateString('en-GB',{weekday:'short',month:'short',day:'numeric'});
+  }
+
+  listEl.innerHTML=Object.entries(byDay).map(([day,cmds])=>`
+    <div class="mb-4">
+      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] mb-1.5 pt-1">${dayLabel(day)} <span class="font-normal normal-case text-[#64748b]">(${cmds.length})</span></div>
+      ${cmds.map(c=>{
+        const failed=c.exit_code&&c.exit_code!==0;
+        const proj=(c.cwd||'').split('/').filter(Boolean).pop()||'';
+        const cmd=esc(c.command||'');
+        const dur=fmtDur(c.duration_ms);
+        return`<div class="flex items-baseline gap-3 px-3 py-1 rounded-md hover:bg-[#14141f] transition-colors ${failed?'text-red-400':'text-[#cbd5e1]'}">
+          <span class="text-[#64748b] shrink-0 text-[12px]">${fmtTime(c.ts)}</span>
+          <span class="shrink-0 w-5 text-center text-[12px]">${failed?'✗':'<span class="text-[#4ade80]">✓</span>'}</span>
+          <span class="shrink-0 text-[#64748b] w-12 text-right text-[12px]">${dur}</span>
+          <span class="flex-1 truncate">${cmd}</span>
+          ${proj?`<span class="text-[11px] text-[#4f46e5] shrink-0">[${esc(proj)}]</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+async function loadShellProjects(){
+  const projects=await api('/api/shell/projects').catch(()=>[]);
+  const sel=document.getElementById('sh-project');
+  projects.forEach(p=>{
+    const opt=document.createElement('option');
+    opt.value=p; opt.textContent=p;
+    sel.appendChild(opt);
+  });
 }
 function goHome(){
   clearFilter(false);
@@ -842,7 +1006,7 @@ document.addEventListener('keydown',e=>{
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 history.replaceState({tab:'browse',tag:null},'','#browse');
-Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);
+Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats(),loadShellProjects()]);
 </script>
 </body>
 </html>
