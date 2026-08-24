@@ -81,6 +81,49 @@ def run(conn, args: list[str]) -> int:
         print("Error: provide a search query.")
         return 1
 
+    # ── Expand session filter to include linked sessions ──────────────────────
+    session_ids: list[str] | None = None
+    if session_filter:
+        # Resolve partial ID
+        row = conn.execute(
+            "SELECT session_id FROM claude_sessions WHERE session_id LIKE ?",
+            (session_filter + "%",)
+        ).fetchone()
+        if row:
+            root_sid = row["session_id"]
+            # Walk link graph to find all linked sessions
+            try:
+                visited: set[str] = set()
+                queue = [root_sid]
+                while queue:
+                    sid = queue.pop()
+                    if sid in visited:
+                        continue
+                    visited.add(sid)
+                    linked = conn.execute(
+                        """SELECT linked_to FROM session_links WHERE session_id = ?
+                           UNION
+                           SELECT session_id FROM session_links WHERE linked_to = ?""",
+                        (sid, sid)
+                    ).fetchall()
+                    for r in linked:
+                        if r[0] not in visited:
+                            queue.append(r[0])
+                session_ids = list(visited)
+            except Exception:
+                session_ids = [root_sid]
+        else:
+            session_ids = [session_filter]
+
+        if len(session_ids) > 1:
+            titles = []
+            for sid in session_ids:
+                t = conn.execute(
+                    "SELECT title FROM session_titles WHERE session_id=?", (sid,)
+                ).fetchone()
+                titles.append((t["title"] if t else None) or sid[:8])
+            print(f"\n  \033[2mSearching {len(session_ids)} linked sessions: {', '.join(titles)}\033[0m")
+
     import numpy as np
 
     # ── Semantic search ───────────────────────────────────────────────────────
@@ -128,7 +171,7 @@ def run(conn, args: list[str]) -> int:
             continue
         if row["role"] not in ("user", "assistant"):
             continue
-        if session_filter and not row["session_id"].startswith(session_filter):
+        if session_ids is not None and row["session_id"] not in session_ids:
             continue
         seen_ids.add(msg_id)
         selected.append({"score": score, "source": "semantic", **dict(row)})
@@ -138,7 +181,7 @@ def run(conn, args: list[str]) -> int:
     for row in kw_rows:
         if row["id"] in seen_ids:
             continue
-        if session_filter and not row["session_id"].startswith(session_filter):
+        if session_ids is not None and row["session_id"] not in session_ids:
             continue
         seen_ids.add(row["id"])
         selected.append({"score": 0.0, "source": "keyword", **dict(row)})
@@ -148,7 +191,7 @@ def run(conn, args: list[str]) -> int:
     # ── If --full and session filter, also grab surrounding messages ──────────
     # Context window: pull messages before/after each match so Claude
     # sees the full exchange, not just isolated lines.
-    if full and session_filter and selected:
+    if full and session_ids and selected:
         all_match_ids = {m["id"] for m in selected}
         # For each matched message, fetch 2 messages before and 2 after in the session
         extra = []
@@ -156,12 +199,12 @@ def run(conn, args: list[str]) -> int:
             rows = conn.execute(
                 """SELECT id, role, content_text, ts, session_id
                    FROM claude_messages
-                   WHERE session_id LIKE ?
+                   WHERE session_id IN ({})
                      AND role IN ('user','assistant')
                      AND content_text IS NOT NULL
                      AND ABS(id - ?) <= 3
-                   ORDER BY id ASC""",
-                (session_filter + "%", msg["id"])
+                   ORDER BY id ASC""".format(",".join("?" * len(session_ids))),
+                (*session_ids, msg["id"])
             ).fetchall()
             for r in rows:
                 if r["id"] not in all_match_ids and r["id"] not in seen_ids:

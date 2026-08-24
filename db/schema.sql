@@ -112,6 +112,17 @@ CREATE TABLE IF NOT EXISTS sync_state (
     indexed_at   INTEGER
 );
 
+-- Session links — groups related or continuation sessions together
+CREATE TABLE IF NOT EXISTS session_links (
+    id          INTEGER PRIMARY KEY,
+    session_id  TEXT NOT NULL,   -- this session
+    linked_to   TEXT NOT NULL,   -- is linked to this session
+    link_type   TEXT DEFAULT 'continuation',  -- 'continuation' | 'related' | 'split'
+    note        TEXT,            -- optional note about the link
+    created_at  INTEGER NOT NULL,
+    UNIQUE(session_id, linked_to)
+);
+
 -- Shell command log (populated by daemon/shell_hook.sh)
 CREATE TABLE IF NOT EXISTS shell_commands (
     id          INTEGER PRIMARY KEY,

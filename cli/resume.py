@@ -129,6 +129,23 @@ def run(conn, args: list[str]) -> int:
         except Exception:
             pass
 
+        # ── Linked sessions ───────────────────────────────────────────────────
+        try:
+            linked = conn.execute(
+                """SELECT sl.linked_to, t.title FROM session_links sl
+                   LEFT JOIN session_titles t ON t.session_id = sl.linked_to
+                   WHERE sl.session_id = ?""",
+                (sid,)
+            ).fetchall()
+            if linked:
+                p()
+                p("  \033[2mLinked sessions (also searched):\033[0m")
+                for lk in linked:
+                    ltitle = (lk["title"] or lk["linked_to"][:8])[:60]
+                    p(f"  \033[2m⟵ {ltitle}  ({lk['linked_to'][:8]})\033[0m")
+        except Exception:
+            pass
+
         # ── Usage hint ────────────────────────────────────────────────────────
         p()
         p(f"  \033[35m→ tm context --session {sid[:8]} \"what you need\"\033[0m")
