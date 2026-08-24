@@ -111,3 +111,25 @@ CREATE TABLE IF NOT EXISTS sync_state (
     last_mtime   REAL,
     indexed_at   INTEGER
 );
+
+-- Shell command log (populated by daemon/shell_hook.sh)
+CREATE TABLE IF NOT EXISTS shell_commands (
+    id          INTEGER PRIMARY KEY,
+    ts          INTEGER NOT NULL,     -- command start time, epoch ms
+    duration_ms INTEGER,              -- how long it ran in ms
+    exit_code   INTEGER,              -- exit status (0 = success)
+    command     TEXT NOT NULL,        -- full command text as typed
+    cwd         TEXT,                 -- working directory when command ran
+    shell_pid   INTEGER               -- shell PID — groups commands in one terminal session
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS shell_commands_unique
+    ON shell_commands(ts, command);
+
+-- FTS index over shell commands
+CREATE VIRTUAL TABLE IF NOT EXISTS shell_commands_fts USING fts5(
+    command,
+    cwd,
+    content='shell_commands',
+    content_rowid='id'
+);

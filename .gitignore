@@ -1,6 +1,7 @@
 db/terminalmd.db
 db/terminalmd.db-shm
 db/terminalmd.db-wal
+shell_log.jsonl
 __pycache__/
 *.py[cod]
 *.egg-info/

@@ -4,7 +4,7 @@ tm — TerminalMind CLI
 Usage:
     tm serve                         Launch browser dashboard (localhost:8888)
     tm serve --no-browser            Run server only, no browser open
-    tm sync                          Re-index all Claude files
+    tm sync                          Re-index all Claude files + shell log
     tm verify                        Check what's indexed + health report
     tm status                        Active sessions + DB stats
     tm search <query> [--last Nd]    Full-text search across all conversations
@@ -15,6 +15,11 @@ Usage:
     tm history                       Chronological session timeline
     tm history --project NAME        Filter by project
     tm history --days 14             Last 14 days only
+    tm shell                         Shell command history
+    tm shell --project NAME          Filter by working directory
+    tm shell --failed                Show only commands that failed (exit != 0)
+    tm shell --days 7                Last 7 days only
+    tm shell --search QUERY          Full-text search across commands
     tm service install               Auto-start server on login (macOS/Linux)
     tm service uninstall             Remove auto-start
     tm service status                Check if background service is running
@@ -25,16 +30,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
-from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder
-from cli import search, sessions, status, verify, today, context, digest, report, history
+from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder, shell_commands as shell_idx
+from cli import search, sessions, status, verify, today, context, digest, report, history, shell
 
 HELP = __doc__
 
 
 def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True) -> None:
-    h = claude_history.run(conn)
-    t = claude_transcripts.run(conn)
-    s = claude_sessions.run(conn)
+    h  = claude_history.run(conn)
+    t  = claude_transcripts.run(conn)
+    s  = claude_sessions.run(conn)
+    sc = shell_idx.run(conn)
     if titles:
         titled, method = title_engine.run(conn, use_ollama=True)
         title_note = f"{titled} titles via {method}" if titled else "titles up to date"
@@ -46,7 +52,8 @@ def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True) ->
     else:
         embed_note = "embeddings skipped"
     if verbose:
-        print(f"  synced  {h} prompts  │  {t} messages  │  {s} sessions  │  {title_note}  │  {embed_note}")
+        shell_note = f"  │  {sc} shell cmds" if sc else ""
+        print(f"  synced  {h} prompts  │  {t} messages  │  {s} sessions  │  {title_note}  │  {embed_note}{shell_note}")
 
 
 def main():
@@ -100,6 +107,10 @@ def main():
     elif cmd == "history":
         sync(conn, verbose=False, embed=False)
         history.run(conn, rest)
+
+    elif cmd == "shell":
+        sync(conn, verbose=False, embed=False)
+        shell.run(conn, rest)
 
     elif cmd == "today":
         sync(conn, verbose=False)
