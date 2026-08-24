@@ -92,6 +92,15 @@ tm history                            # chronological Claude session timeline
 tm history --shell                    # sessions interleaved with shell commands
 tm history --project Segmentation     # filter by project
 
+# Session recovery and linking
+tm resume                             # minimal restart — ~100 tokens, paste into new session
+tm resume --project Segmentation      # last session for a specific project
+tm resume --last 3                    # last 3 sessions (when multiple crashed)
+tm link ID1 ID2                       # link two sessions — context searches span both
+tm link ID1 ID2 --note "continued"    # with a note
+tm link unlink ID1 ID2                # remove a link
+tm links                              # show all linked session groups
+
 # Shell command history
 tm shell                              # newest 100 commands
 tm shell --project Segmentation       # filter by working directory
@@ -137,6 +146,19 @@ tm context "what did we decide about MedGemma"
 ```bash
 tm report --days 7
 # → per-project session counts + actual working hours from shell spans
+```
+
+### Resume after a session crash
+Your sessions ended unexpectedly. Start a new one, run:
+```bash
+tm resume            # or tm resume --last 3 if multiple crashed
+```
+Paste the output (~100 tokens) into the new session. Claude knows the session ID and last prompts, and pulls the rest on demand — no bulk context load.
+
+Then link the old session to the new one so context searches span both:
+```bash
+tm link OLD_ID NEW_ID --note "continued after crash"
+# Now: tm context --session NEW_ID searches BOTH sessions automatically
 ```
 
 ### Debug what you ran yesterday
