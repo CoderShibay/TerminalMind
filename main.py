@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
 from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder, shell_commands as shell_idx
-from cli import search, sessions, status, verify, today, week, context, digest, report, history, shell
+from cli import search, sessions, status, verify, today, week, context, digest, report, history, shell, resume
 
 HELP = __doc__
 
@@ -111,6 +111,10 @@ def main():
     elif cmd == "shell":
         sync(conn, verbose=False, embed=False)
         shell.run(conn, rest)
+
+    elif cmd == "resume":
+        sync(conn, verbose=False, embed=False)
+        resume.run(conn, rest)
 
     elif cmd == "week":
         sync(conn, verbose=False, embed=False)
