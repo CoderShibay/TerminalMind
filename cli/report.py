@@ -1,4 +1,4 @@
-"""tm report — project activity report from session data."""
+"""tm report — project activity report from session data, with shell working time."""
 from datetime import datetime, timedelta
 
 
@@ -29,6 +29,49 @@ def _last_active(ts) -> str:
         return "?"
 
 
+def _working_time(conn, tag: str, cutoff_ms: int) -> str:
+    """Total working time for a project from shell command spans.
+
+    For each day, measures from the first shell command in that project
+    to the last. Sums across all days in the period.
+    Returns a formatted string like '3h 22m', or '' if no shell data.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT strftime('%Y-%m-%d', ts/1000, 'unixepoch', 'localtime') as day,
+                      MIN(ts) as first_ts,
+                      MAX(ts) as last_ts
+               FROM shell_commands
+               WHERE cwd LIKE ? AND ts >= ?
+               GROUP BY day""",
+            (f"%{tag}%", cutoff_ms)
+        ).fetchall()
+    except Exception:
+        return ""
+
+    if not rows:
+        return ""
+
+    total_ms = sum(r["last_ts"] - r["first_ts"] for r in rows)
+    total_mins = total_ms // 60000
+
+    if total_mins < 1:
+        return "<1m"
+    if total_mins < 60:
+        return f"{total_mins}m"
+    return f"{total_mins // 60}h {total_mins % 60:02d}m"
+
+
+def _has_shell_data(conn, cutoff_ms: int) -> bool:
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM shell_commands WHERE ts >= ?", (cutoff_ms,)
+        ).fetchone()[0]
+        return count > 0
+    except Exception:
+        return False
+
+
 def run(conn, args: list[str]) -> int:
     # Parse --days flag
     days = 30
@@ -39,13 +82,13 @@ def run(conn, args: list[str]) -> int:
         else:
             i += 1
 
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
-    cutoff_label = f"Last {days} days" if days != 9999 else "All time"
+    cutoff     = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff_ms  = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+    cutoff_label = f"Last {days} days"
+
+    has_shell = _has_shell_data(conn, cutoff_ms)
 
     # ── Per-project stats ─────────────────────────────────────────────────────
-    # Each session is counted under ALL its detected tags (a session about
-    # both Segmentation and TerminalMind appears in both). Message counts
-    # are NOT split — each project gets the full session message count.
     session_rows = conn.execute(
         """SELECT s.session_id, s.started_at,
                   COUNT(m.id) as msg_count,
@@ -86,7 +129,6 @@ def run(conn, args: list[str]) -> int:
         (cutoff,)
     ).fetchone()
 
-    # Sort by session count desc
     sorted_projects = sorted(project_data.items(), key=lambda x: x[1]["sessions"], reverse=True)
     max_sessions = max((v["sessions"] for _, v in sorted_projects), default=1)
 
@@ -103,9 +145,17 @@ def run(conn, args: list[str]) -> int:
         (cutoff,)
     ).fetchone()[0]
     total_prompts = conn.execute(
-        "SELECT COUNT(*) FROM claude_prompts WHERE ts >= ?",
-        (int((datetime.now() - timedelta(days=days)).timestamp() * 1000),)
+        "SELECT COUNT(*) FROM claude_prompts WHERE ts >= ?", (cutoff_ms,)
     ).fetchone()[0]
+
+    total_shell = 0
+    if has_shell:
+        try:
+            total_shell = conn.execute(
+                "SELECT COUNT(*) FROM shell_commands WHERE ts >= ?", (cutoff_ms,)
+            ).fetchone()[0]
+        except Exception:
+            pass
 
     # ── Activity by day of week ───────────────────────────────────────────────
     dow_rows = conn.execute(
@@ -116,35 +166,53 @@ def run(conn, args: list[str]) -> int:
            GROUP BY dow""",
         (cutoff,)
     ).fetchall()
-    dow_map = {r["dow"]: r["c"] for r in dow_rows}
+    dow_map   = {r["dow"]: r["c"] for r in dow_rows}
     dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    max_dow = max(dow_map.values(), default=1)
+    max_dow   = max(dow_map.values(), default=1)
 
     # ── Print ─────────────────────────────────────────────────────────────────
-    W = 62
+    W = 68
     print()
     print("  " + "═" * W)
     print(f"  \033[1m  Project Report  —  {cutoff_label}\033[0m")
     print("  " + "═" * W)
-    print(f"\n  {total_sessions} sessions  ·  {total_msgs} prompts  ·  {total_prompts} total prompts sent\n")
+
+    summary = f"\n  {total_sessions} sessions  ·  {total_msgs} prompts  ·  {total_prompts} total prompts sent"
+    if has_shell:
+        summary += f"  ·  {total_shell} shell commands"
+    print(summary + "\n")
 
     if sorted_projects:
-        print(f"  {'PROJECT':<20} {'ACTIVITY':<20} {'SESS':>5}  {'MSGS':>6}  LAST")
+        if has_shell:
+            print(f"  {'PROJECT':<20} {'ACTIVITY':<20} {'SESS':>5}  {'MSGS':>6}  {'TIME':>8}  LAST")
+        else:
+            print(f"  {'PROJECT':<20} {'ACTIVITY':<20} {'SESS':>5}  {'MSGS':>6}  LAST")
         print("  " + "─" * W)
+
         for tag, data in sorted_projects:
-            bar    = _bar(data["sessions"], max_sessions)
-            last   = _last_active(data["last_active"])
-            sess   = data["sessions"]
-            msgs   = data["messages"]
-            print(f"  {tag:<20} \033[35m{bar}\033[0m  {sess:>4}  {msgs:>6}  {last}")
+            bar  = _bar(data["sessions"], max_sessions)
+            last = _last_active(data["last_active"])
+            sess = data["sessions"]
+            msgs = data["messages"]
+
+            if has_shell:
+                wtime = _working_time(conn, tag, cutoff_ms)
+                wtime_str = f"{wtime:>8}" if wtime else f"{'—':>8}"
+                print(f"  {tag:<20} \033[35m{bar}\033[0m  {sess:>4}  {msgs:>6}  "
+                      f"\033[36m{wtime_str}\033[0m  {last}")
+            else:
+                print(f"  {tag:<20} \033[35m{bar}\033[0m  {sess:>4}  {msgs:>6}  {last}")
 
         if untagged and untagged["c"]:
-            print(f"  {'(untagged)':<20} {'░'*18}  {untagged['c']:>4}  {untagged['msgs'] or 0:>6}")
+            if has_shell:
+                print(f"  {'(untagged)':<20} {'░'*18}  {untagged['c']:>4}  {untagged['msgs'] or 0:>6}  {'':>8}")
+            else:
+                print(f"  {'(untagged)':<20} {'░'*18}  {untagged['c']:>4}  {untagged['msgs'] or 0:>6}")
     else:
         print("  No sessions with project tags found in this period.")
 
     # ── Day of week breakdown ─────────────────────────────────────────────────
-    print(f"\n  {'ACTIVITY BY DAY':}")
+    print(f"\n  ACTIVITY BY DAY")
     print("  " + "─" * 40)
     for i, name in enumerate(dow_names):
         count = dow_map.get(str(i), 0)
@@ -153,6 +221,8 @@ def run(conn, args: list[str]) -> int:
 
     print()
     print("  " + "─" * W)
+    if not has_shell:
+        print("  \033[2mTIME column appears once shell hook is active (source ~/terminalmd/daemon/shell_hook.sh)\033[0m")
     print(f"  Use \033[1mtm report --days 7\033[0m for last week, \033[1m--days 90\033[0m for 3 months\n")
 
     return 0
