@@ -236,7 +236,7 @@ def run(conn, args: list[str]) -> int:
         ).fetchone()
         title = title_row["title"] if title_row else sid[:8] + "…"
         first_ts = min((m["ts"] for m in msgs if m["ts"]), default="")
-        lines.append(f"─── {title} · {_ts(first_ts)} ───")
+        lines.append(f"─── {title} · {_ts(first_ts)} · {sid[:8]} ───")
 
         for msg in msgs:
             role = "YOU " if msg["role"] == "user" else "ASST"

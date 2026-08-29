@@ -633,7 +633,7 @@ function renderCard(s,isPinnedSection=false){
         <div class="flex items-center gap-2 text-[12px] text-[#94a3b8] mt-0.5">
           <span>${relTime(s.started_at)}</span><span>·</span>
           <span>${s.msg_count||0} msgs</span><span>·</span>
-          <span class="font-mono text-[11px]">${sid.slice(0,8)}</span>
+          <span class="font-mono text-[11px] text-[#4f46e5] cursor-pointer hover:text-[#818cf8]" title="Click to copy — use with: tm context --session ${sid.slice(0,8)}" onclick="event.stopPropagation();navigator.clipboard.writeText('${sid.slice(0,8)}');this.textContent='✓';setTimeout(()=>this.textContent='${sid.slice(0,8)}',1200)">${sid.slice(0,8)}</span>
         </div>
         ${tagHtml?`<div class="flex gap-1.5 mt-1.5 flex-wrap">${tagHtml}</div>`:''}
       </div>
@@ -933,6 +933,7 @@ async function doSearch(){
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div class="flex items-center gap-2 flex-wrap min-w-0">
           <span class="text-white text-[13px] font-medium truncate">${esc(title)}</span>
+          <span class="text-[10px] font-mono text-[#4f46e5] bg-[#1e1e35] border border-[#2d2d4d] rounded px-1.5 py-0.5 cursor-pointer shrink-0" title="Click to copy session ID" onclick="event.stopPropagation();navigator.clipboard.writeText('${sid.slice(0,8)}');this.textContent='✓ copied';setTimeout(()=>this.textContent='${sid.slice(0,8)}',1200)">${sid.slice(0,8)}</span>
           ${tags}${semBadge}
         </div>
         <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
