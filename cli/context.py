@@ -47,6 +47,117 @@ def _format_message(text: str, full: bool, char_limit: int) -> str:
         return flat
 
 
+def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) -> int:
+    """Return the last N messages of a session in chronological order — no search needed."""
+    import re
+    import subprocess
+
+    if not session_filter:
+        # Default to most recent session
+        row = conn.execute(
+            "SELECT session_id FROM claude_sessions ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            print("\n  No sessions found.\n")
+            return 0
+        session_filter = row["session_id"][:8]
+
+    # Resolve + expand links
+    row = conn.execute(
+        "SELECT session_id FROM claude_sessions WHERE session_id LIKE ?",
+        (session_filter + "%",)
+    ).fetchone()
+    if not row:
+        print(f"\n  Session not found: {session_filter}\n")
+        return 1
+
+    root_sid = row["session_id"]
+    visited: set[str] = set()
+    queue = [root_sid]
+    while queue:
+        sid = queue.pop()
+        if sid in visited:
+            continue
+        visited.add(sid)
+        linked = conn.execute(
+            """SELECT linked_to FROM session_links WHERE session_id=?
+               UNION SELECT session_id FROM session_links WHERE linked_to=?""",
+            (sid, sid)
+        ).fetchall()
+        for r in linked:
+            if r[0] not in visited:
+                queue.append(r[0])
+    session_ids = list(visited)
+
+    placeholders = ",".join("?" * len(session_ids))
+    messages = conn.execute(
+        f"""SELECT role, content_text, ts, session_id FROM claude_messages
+            WHERE session_id IN ({placeholders})
+              AND role IN ('user', 'assistant')
+              AND content_text IS NOT NULL
+            ORDER BY ts DESC LIMIT ?""",
+        (*session_ids, limit)
+    ).fetchall()
+
+    if not messages:
+        # Fall back to prompts for history-only sessions
+        messages = conn.execute(
+            f"""SELECT 'user' as role, prompt_text as content_text, ts, session_id
+                FROM claude_prompts WHERE session_id IN ({placeholders})
+                ORDER BY ts DESC LIMIT ?""",
+            (*session_ids, limit)
+        ).fetchall()
+
+    if not messages:
+        print(f"\n  No messages found for session {session_filter}\n")
+        return 0
+
+    # Reverse to chronological order
+    messages = list(reversed(messages))
+
+    title_row = conn.execute(
+        "SELECT title FROM session_titles WHERE session_id=?", (root_sid,)
+    ).fetchone()
+    title = (title_row["title"] if title_row else None) or root_sid[:8]
+
+    output_lines = []
+
+    def p(text=""):
+        clean = re.sub(r"\033\[[0-9;]*m", "", text)
+        print(text)
+        output_lines.append(clean)
+
+    label = f"last {len(messages)} messages"
+    if len(session_ids) > 1:
+        label += f" ({len(session_ids)} linked sessions)"
+
+    p()
+    p(f'Tail of "{title}" · {root_sid[:8]} [{label}]')
+    p()
+
+    for msg in messages:
+        role  = "YOU " if msg["role"] == "user" else "ASST"
+        text  = _format_message(msg["content_text"], True, char_limit)
+        ts    = _ts(msg["ts"])
+        p(f"\n{role}:  \033[2m{ts}\033[0m")
+        p(text)
+
+    p()
+    approx = _approx_tokens("\n".join(output_lines))
+    p(f"[{len(messages)} message(s) · ~{approx} tokens · tail]")
+
+    output = "\n".join(output_lines)
+    print("\n" + output + "\n")
+
+    try:
+        subprocess.run(["pbcopy"], input=output.encode(), check=True)
+        print("  ✓ Copied to clipboard — paste into new Claude session\n")
+    except Exception:
+        pass
+
+    return 0
+
+
 def run(conn, args: list[str]) -> int:
     if not args:
         print("Usage:")
@@ -54,13 +165,15 @@ def run(conn, args: list[str]) -> int:
         print("  tm context \"question\" --full           full messages with code/errors preserved")
         print("  tm context \"question\" --session ID     search within one session only")
         print("  tm context \"question\" --top 5          limit to 5 results")
+        print("  tm context --session ID --tail         last 20 messages in order (no query needed)")
         return 1
 
     # Parse args
     query_parts = []
-    top_n = 8
+    top_n      = 8
     session_filter = None
-    full = False
+    full       = False
+    tail       = False
     char_limit = 240
 
     i = 0
@@ -73,12 +186,24 @@ def run(conn, args: list[str]) -> int:
             full = True
             char_limit = 4000
             i += 1
+        elif args[i] == "--tail":
+            tail = True
+            full = True          # tail always preserves full formatting
+            char_limit = 4000
+            i += 1
         else:
             query_parts.append(args[i]); i += 1
 
     query = " ".join(query_parts)
+
+    # --tail mode: no query needed — just return recent messages in order
+    if tail:
+        return _tail_mode(conn, session_filter, top_n if top_n != 8 else 20, char_limit)
+
     if not query:
-        print("Error: provide a search query.")
+        print("The command needs a query. Did you mean:")
+        print("  tm context \"some topic\" --session ID --full")
+        print("  tm context --session ID --tail       (no query — last 20 messages in order)")
         return 1
 
     # ── Expand session filter to include linked sessions ──────────────────────
