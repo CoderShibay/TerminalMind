@@ -97,9 +97,15 @@ tm resume                             # minimal restart — ~100 tokens, paste i
 tm resume --project Segmentation      # last session for a specific project
 tm resume --last 3                    # last 3 sessions (when multiple crashed)
 tm link ID1 ID2                       # link two sessions — context searches span both
+tm link ID1 ID2 ID3                   # link three or more sessions in one shot
 tm link ID1 ID2 --note "continued"    # with a note
 tm link unlink ID1 ID2                # remove a link
 tm links                              # show all linked session groups
+
+# Project Logger — push session to Obsidian vault (zero tokens)
+tm push SESSION_ID PROJECT_NAME       # extract session → append to project Build Log.md
+tm push bfada840 SpotTrader           # short 8-char session ID works
+tm push bfada840 SpotTrader --dry-run # preview without writing
 
 # Shell command history
 tm shell                              # newest 100 commands
@@ -160,6 +166,16 @@ Then link the old session to the new one so context searches span both:
 tm link OLD_ID NEW_ID --note "continued after crash"
 # Now: tm context --session NEW_ID searches BOTH sessions automatically
 ```
+
+### Log a session to your Obsidian vault (zero tokens)
+After finishing a session, push what was built directly to your project's Build Log — no Claude involved, no extra tokens:
+```bash
+tm push bfada840 SpotTrader
+# → reads ~/.claude/projects/**/bfada840*.jsonl
+# → extracts: files written, git commits, errors, decisions
+# → prepends formatted entry to ~/Documents/SpotTrader/Build Log.md
+```
+Use `--dry-run` to preview the entry before writing.
 
 ### Debug what you ran yesterday
 ```bash
