@@ -29,3 +29,22 @@ def claude_dir() -> Path:
     # Return standard path even if it doesn't exist yet —
     # installer / first run will create it
     return standard
+
+
+def install_dir() -> Path:
+    """Return the TerminalMind install directory."""
+    # Hidden dir install (install.sh / install.ps1)
+    hidden = Path.home() / ".terminalmd"
+    if hidden.exists():
+        return hidden
+    # Legacy: cloned directly as ~/terminalmd
+    legacy = Path.home() / "terminalmd"
+    if legacy.exists():
+        return legacy
+    # Default to hidden dir (new installs)
+    return hidden
+
+
+def shell_log_path() -> Path:
+    """Return the shell_log.jsonl path regardless of install location."""
+    return install_dir() / "shell_log.jsonl"

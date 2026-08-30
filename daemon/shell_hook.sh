@@ -9,7 +9,12 @@
 # To verify it's working: run a command, then check:
 #   tail -1 ~/terminalmd/shell_log.jsonl
 
-_TM_LOG="$HOME/terminalmd/shell_log.jsonl"
+# Resolve install dir — hidden (.terminalmd) for new installs, legacy for old
+if [ -d "$HOME/.terminalmd" ]; then
+    _TM_LOG="$HOME/.terminalmd/shell_log.jsonl"
+else
+    _TM_LOG="$HOME/terminalmd/shell_log.jsonl"
+fi
 _tm_start=0
 _tm_last_cmd=""
 

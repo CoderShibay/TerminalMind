@@ -1,9 +1,13 @@
-"""Index ~/terminalmd/shell_log.jsonl → shell_commands table."""
+"""Index shell_log.jsonl → shell_commands table."""
 import json
+import sys
 import time
 from pathlib import Path
 
-LOG_PATH = Path.home() / "terminalmd" / "shell_log.jsonl"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import shell_log_path
+
+LOG_PATH = shell_log_path()
 
 
 def run(conn) -> int:

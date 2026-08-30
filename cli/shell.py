@@ -1,6 +1,11 @@
 """tm shell — shell command history, filterable by project, time, exit code."""
+import platform
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import shell_log_path
 
 
 def _ts(ts_ms) -> str:
@@ -38,14 +43,24 @@ def _not_set_up() -> None:
     print()
     print("  Shell command logging is not active yet.")
     print()
-    print("  Add this line to ~/.zshrc:")
-    print("    \033[1msource ~/terminalmd/daemon/shell_hook.sh\033[0m")
-    print()
-    print("  Then activate it:")
-    print("    \033[1msource ~/.zshrc\033[0m")
-    print()
-    print("  Run a few commands, then check it worked:")
-    print("    \033[1mtail -3 ~/terminalmd/shell_log.jsonl\033[0m")
+    if platform.system() == "Windows":
+        print("  Add this line to your PowerShell profile ($PROFILE):")
+        print("    \033[1m. \"$env:USERPROFILE\\.terminalmd\\daemon\\shell_hook.ps1\"\033[0m")
+        print()
+        print("  Then reload your profile:")
+        print("    \033[1m. $PROFILE\033[0m")
+        print()
+        print("  Run a few commands, then check it worked:")
+        print("    \033[1mGet-Content \"$env:USERPROFILE\\.terminalmd\\shell_log.jsonl\" -Tail 3\033[0m")
+    else:
+        print("  Add this line to ~/.zshrc (or ~/.bashrc):")
+        print("    \033[1msource ~/.terminalmd/daemon/shell_hook.sh\033[0m")
+        print()
+        print("  Then activate it:")
+        print("    \033[1msource ~/.zshrc\033[0m")
+        print()
+        print("  Run a few commands, then check it worked:")
+        print("    \033[1mtail -3 ~/.terminalmd/shell_log.jsonl\033[0m")
     print("    \033[1mtm shell\033[0m")
     print()
 
@@ -77,7 +92,7 @@ def run(conn, args: list[str]) -> int:
             i += 1
 
     # ── Check hook is installed ───────────────────────────────────────────────
-    log_path = Path.home() / "terminalmd" / "shell_log.jsonl"
+    log_path = shell_log_path()
     try:
         total = conn.execute("SELECT COUNT(*) FROM shell_commands").fetchone()[0]
     except Exception:
