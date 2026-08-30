@@ -141,6 +141,31 @@ def _first_sentence(text: str, max_len: int = 160) -> str:
     return text[:max_len].strip()
 
 
+def _matching_sentence(text: str, pattern: re.Pattern, max_len: int = 160) -> str:
+    """Return the sentence that actually contains the pattern match, not just the first."""
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        s = sentence.strip()
+        if not pattern.search(s):
+            continue
+        # Skip sentences where the keyword is inside backticks or quotes —
+        # those are explanations of the keyword, not actual uses of it
+        if re.search(r'["`]([^"`]*' + pattern.pattern + r'[^"`]*)["`]', s, re.IGNORECASE):
+            continue
+        # Skip markdown list headers (start with ** bold)
+        if s.startswith("**"):
+            continue
+        if len(s) > 20:
+            return s[:max_len]
+    return ""  # nothing real found
+
+
+# Git commands whose stdout should never be treated as errors
+GIT_OUTPUT_CMDS = re.compile(
+    r"\bgit\s+(push|pull|fetch|status|log|diff|show|stash|rebase|merge)\b",
+    re.IGNORECASE,
+)
+
+
 def _parse_session(jsonl_path: Path) -> dict:
     """Read a session jsonl and return structured extraction."""
     built_files: list[str] = []
@@ -163,6 +188,7 @@ def _parse_session(jsonl_path: Path) -> dict:
 
     seen_files: set[str] = set()
     pending_error: str | None = None   # last error text, waiting for the fix
+    last_bash_cmd: str = ""            # track last Bash command to skip git output
 
     for i, entry in enumerate(entries):
         # Grab date from first timestamped entry
@@ -205,6 +231,7 @@ def _parse_session(jsonl_path: Path) -> dict:
 
                     elif name == "Bash":
                         cmd = inp.get("command", "")
+                        last_bash_cmd = cmd
                         if GIT_COMMIT_RE.search(cmd) and "git commit" in cmd:
                             msg_text = _extract_commit_msg(cmd)
                             if msg_text and msg_text not in commits:
@@ -222,15 +249,15 @@ def _parse_session(jsonl_path: Path) -> dict:
                     if pending_error and not fix_text:
                         fix_text = _first_sentence(text, 200)
 
-                    # Decisions
+                    # Decisions — extract the sentence that contains the keyword
                     if DECISION_PATTERNS.search(text) and len(decisions) < 5:
-                        sentence = _first_sentence(text, 160)
+                        sentence = _matching_sentence(text, DECISION_PATTERNS, 160)
                         if sentence and len(sentence) > 25 and not TRIVIAL_RE.match(sentence) and sentence not in decisions:
                             decisions.append(sentence)
 
-                    # Next steps
+                    # Next steps — same: find the sentence with the keyword
                     if NEXT_PATTERNS.search(text) and len(next_steps) < 3:
-                        sentence = _first_sentence(text, 160)
+                        sentence = _matching_sentence(text, NEXT_PATTERNS, 160)
                         if sentence and len(sentence) > 20 and not TRIVIAL_RE.match(sentence) and sentence not in next_steps:
                             next_steps.append(sentence)
 
@@ -265,6 +292,11 @@ def _parse_session(jsonl_path: Path) -> dict:
 
                 # Skip short/empty lines after stripping
                 if len(first_line) < 10:
+                    continue
+
+                # Skip output from git push/pull/status/log — contains commit
+                # messages that may include the word "error" incidentally
+                if GIT_OUTPUT_CMDS.search(last_bash_cmd):
                     continue
 
                 # is_error + tool_use_error tag wrapping the content = definitive
@@ -372,21 +404,16 @@ def _find_build_log(project_name: str) -> Path | None:
 
 
 def _append_entry(build_log: Path, entry: str) -> None:
-    """Prepend entry after the header block (newest first)."""
+    """Prepend new entry before existing entries (newest first)."""
     content = build_log.read_text(encoding="utf-8")
 
-    # Find the first --- separator after the header
-    insert_after = "---\n"
-    # Find the LAST occurrence of the separator line that precedes the log entries
-    # The format is: frontmatter --- then title then blank then "One entry..." then "---"
-    parts = content.split("\n---\n")
-    if len(parts) >= 2:
-        # Insert after the second "---" (end of intro block)
-        header = parts[0] + "\n---\n" + parts[1] + "\n---\n"
-        rest   = "\n---\n".join(parts[2:])
-        new_content = header + "\n" + entry + "\n\n---\n" + rest if rest.strip() else header + "\n" + entry + "\n"
+    # Find the first ## heading — that's where entries start
+    m = re.search(r"\n(## )", content)
+    if m:
+        insert_pos = m.start() + 1
+        new_content = content[:insert_pos] + entry + "\n\n---\n\n" + content[insert_pos:]
     else:
-        # Fallback: just append
+        # No entries yet — append after the last --- in the header
         new_content = content.rstrip() + "\n\n---\n\n" + entry + "\n"
 
     build_log.write_text(new_content, encoding="utf-8")
