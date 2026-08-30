@@ -20,6 +20,9 @@ Usage:
     tm shell --failed                Show only commands that failed (exit != 0)
     tm shell --days 7                Last 7 days only
     tm shell --search QUERY          Full-text search across commands
+    tm session                           Show the current session ID and title
+    tm sessions                          List all sessions (ID + title) newest to oldest
+    tm sessions --simple                 Clean two-column output: ID  Title
     tm push SESSION_ID PROJECT         Extract session → append to project Build Log.md
     tm push SESSION_ID PROJECT --dry-run  Preview without writing
     tm push init PROJECT               Create vault (Home.md + Build Log.md) from template
@@ -35,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
 from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder, shell_commands as shell_idx
-from cli import search, sessions, status, verify, today, week, context, digest, report, history, shell, resume, link, push
+from cli import search, sessions, session, status, verify, today, week, context, digest, report, history, shell, resume, link, push
 
 HELP = __doc__
 
@@ -139,6 +142,10 @@ def main():
     elif cmd == "today":
         sync(conn, verbose=False)
         today.run(conn, rest)
+
+    elif cmd == "session":
+        sync(conn, verbose=False, embed=False)
+        session.run(conn, rest)
 
     elif cmd == "sessions":
         sync(conn, verbose=False)
