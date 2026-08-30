@@ -23,6 +23,9 @@ Usage:
     tm session                           Show the current session ID and title
     tm sessions                          List all sessions (ID + title) newest to oldest
     tm sessions --simple                 Clean two-column output: ID  Title
+    tm sessions "query"                  Search sessions by title or session ID prefix
+    tm sessions "bfad"                   Find by partial session ID
+    tm sessions "SpotTrader"             Find by title keyword
     tm push SESSION_ID PROJECT         Extract session → append to project Build Log.md
     tm push SESSION_ID PROJECT --dry-run  Preview without writing
     tm push init PROJECT               Create vault (Home.md + Build Log.md) from template

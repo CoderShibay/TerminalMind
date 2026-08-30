@@ -19,6 +19,7 @@ def _ts(ts: int | None) -> str:
 
 def run(conn, args: list[str]) -> int:
     project_filter = None
+    search_query   = None
     limit = 200
     simple = False
 
@@ -26,10 +27,15 @@ def run(conn, args: list[str]) -> int:
     while i < len(args):
         if args[i] in ("--project", "-p") and i + 1 < len(args):
             project_filter = args[i + 1]; i += 2
+        elif args[i] in ("--search", "-s") and i + 1 < len(args):
+            search_query = args[i + 1]; i += 2
         elif args[i] == "--limit" and i + 1 < len(args):
             limit = int(args[i + 1]); i += 2
         elif args[i] in ("--simple", "--ids"):
             simple = True; i += 1
+        elif not args[i].startswith("-"):
+            # Positional argument — treat as search query
+            search_query = args[i]; i += 1
         else:
             i += 1
 
@@ -40,10 +46,19 @@ def run(conn, args: list[str]) -> int:
         LEFT JOIN session_titles t ON t.session_id = s.session_id
     """
     params: list = []
+    wheres: list[str] = []
 
     if project_filter:
-        sql += " WHERE (t.project_tags LIKE ? OR t.title LIKE ? OR s.project LIKE ?)"
+        wheres.append("(t.project_tags LIKE ? OR t.title LIKE ? OR s.project LIKE ?)")
         params += [f"%{project_filter}%", f"%{project_filter}%", f"%{project_filter}%"]
+
+    if search_query:
+        # Match against session ID prefix OR title — covers both use cases
+        wheres.append("(s.session_id LIKE ? OR t.title LIKE ?)")
+        params += [f"{search_query}%", f"%{search_query}%"]
+
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
 
     sql += " ORDER BY s.started_at DESC LIMIT ?"
     params.append(limit)
@@ -87,5 +102,8 @@ def run(conn, args: list[str]) -> int:
         print(f"  \033[36m{sid}\033[0m  \033[2m{ts:<19}\033[0m  {st_color}{status[:4]:<6}\033[0m {title}{tag_str}")
 
     print()
-    print(f"  \033[2m{len(rows)} sessions  ·  --simple for ID+title only  ·  --project NAME to filter\033[0m\n")
+    hint = "--simple for ID+title only  ·  --project NAME  ·  tm sessions \"query\" to search"
+    if search_query:
+        hint = f"Showing results for: \"{search_query}\"  ·  {len(rows)} match(es)"
+    print(f"  \033[2m{hint}\033[0m\n")
     return 0
