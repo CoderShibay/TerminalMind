@@ -1,9 +1,13 @@
 """Index ~/.claude/sessions/*.json → claude_sessions table."""
 import json
+import sys
 import time
 from pathlib import Path
 
-SESSIONS_DIR = Path.home() / ".claude" / "sessions"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import claude_dir
+
+SESSIONS_DIR = claude_dir() / "sessions"
 
 _SKIP_PARTS = {"Users", "home", Path.home().name, ""}
 

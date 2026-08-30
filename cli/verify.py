@@ -1,6 +1,10 @@
 """tm verify — show exactly what's indexed and whether anything is missing."""
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import claude_dir as get_claude_dir
 
 
 def _iso(ts: str | None) -> str:
@@ -14,7 +18,7 @@ def _iso(ts: str | None) -> str:
 
 
 def run(conn, args: list[str]) -> int:
-    claude_dir = Path.home() / ".claude"
+    claude_dir = get_claude_dir()
     print()
 
     # ── What Claude Code has on disk ─────────────────────────────────────────

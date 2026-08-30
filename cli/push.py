@@ -8,13 +8,16 @@ Usage:
 import glob
 import json
 import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import claude_dir
 
 DOCS_DIR = Path.home() / "Documents"
-PROJECTS_DIR = Path.home() / ".claude" / "projects"
+PROJECTS_DIR = claude_dir() / "projects"
 
 
 # ── Session resolution ────────────────────────────────────────────────────────

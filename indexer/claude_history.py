@@ -1,10 +1,14 @@
 """Index ~/.claude/history.jsonl → claude_prompts table."""
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
-HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from paths import claude_dir
+
+HISTORY_PATH = claude_dir() / "history.jsonl"
 
 
 def _project_name(path: str | None) -> str | None:
