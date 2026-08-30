@@ -667,7 +667,7 @@ def api_shell_projects():
     return sorted(projects.keys())
 
 
-@app.get("/api/sync")
+@app.post("/api/sync")
 def api_sync():
     global _embed_dirty
     from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder

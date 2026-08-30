@@ -80,8 +80,15 @@ def main():
     if cmd == "serve":
         from server import serve
         no_browser = "--no-browser" in rest
-        port_args  = [a for a in rest if a.isdigit()]
-        port       = int(port_args[0]) if port_args else 8888
+        port = 8888
+        if "--port" in rest:
+            i = rest.index("--port")
+            if i + 1 < len(rest) and rest[i + 1].isdigit():
+                port = int(rest[i + 1])
+        else:
+            port_args = [a for a in rest if a.isdigit()]
+            if port_args:
+                port = int(port_args[0])
         sync(conn, verbose=False)        # always sync on startup
         serve(port=port, no_browser=no_browser)
 

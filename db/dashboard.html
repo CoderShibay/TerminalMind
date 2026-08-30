@@ -981,7 +981,7 @@ async function doSearch(){
 async function doSync(){
   const icon=document.getElementById('sync-icon');
   icon.classList.add('spinner');document.getElementById('sync-btn').style.pointerEvents='none';
-  try{await api('/api/sync');await Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);}
+  try{await api('/api/sync',{method:'POST'});await Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);}
   finally{icon.classList.remove('spinner');document.getElementById('sync-btn').style.pointerEvents='';icon.textContent='✓';setTimeout(()=>{icon.textContent='↻';},1500);}
 }
 

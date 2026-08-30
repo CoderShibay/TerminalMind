@@ -39,14 +39,29 @@ def _extract_text(content) -> str:
     return ""
 
 
+def _project_from_cwd(cwd: str | None) -> str | None:
+    """Derive project name from the session's working directory.
+
+    Works on Mac, Linux, and Windows paths — normalises to forward slashes
+    before splitting so D:\\Work\\MyApp and /Users/alice/MyApp both yield 'MyApp'.
+    """
+    if not cwd:
+        return None
+    name = cwd.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    return name if name and name not in _SKIP_PARTS else None
+
+
 def _project_from_path(file_path: Path) -> str | None:
-    """Derive a project name from the transcript file path."""
-    # path like ~/.claude/projects/-Users-alisyed-Documents-SpotTrader/uuid.jsonl
-    folder = file_path.parent.name  # e.g. -Users-alisyed-Documents-SpotTrader
-    # convert dash-encoded path back to real path segments
+    """Fallback: derive project name from the dash-encoded transcript folder name.
+
+    Claude Code encodes the session cwd as a dash-separated folder name
+    (e.g. -Users-alice-Documents-SpotTrader). This works on Mac/Linux but
+    breaks on Windows paths (drive letters, spaces, underscores all map to dash).
+    Used only when cwd is absent from the transcript entries.
+    """
+    folder = file_path.parent.name
     decoded = folder.replace("-", "/").lstrip("/")
     parts = decoded.split("/")
-    # last meaningful segment = project folder name
     for part in reversed(parts):
         if part and part not in _SKIP_PARTS:
             return part
@@ -63,7 +78,8 @@ def _index_file(conn, jsonl_path: Path) -> int:
     if cur and cur["last_size"] == stat.st_size and abs(cur["last_mtime"] - stat.st_mtime) < 1:
         return 0
 
-    project = _project_from_path(jsonl_path)
+    # Fallback project label from the folder name encoding (Mac/Linux only — breaks on Windows)
+    path_project = _project_from_path(jsonl_path)
     rows = []
 
     with open(jsonl_path, encoding="utf-8", errors="replace") as f:
@@ -86,6 +102,9 @@ def _index_file(conn, jsonl_path: Path) -> int:
             session_id = entry.get("sessionId", "")
             message = entry.get("message", {})
             content = message.get("content", "")
+
+            # Prefer cwd-derived project (works on all platforms) over path-decoded fallback
+            project = _project_from_cwd(cwd) or path_project
 
             if entry_type == "user":
                 # Detect tool result messages — they arrive as "user" role in the API

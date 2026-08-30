@@ -36,7 +36,7 @@ def _dur(ms) -> str:
 def _project(cwd: str | None) -> str:
     if not cwd:
         return ""
-    return cwd.rstrip("/").split("/")[-1]
+    return cwd.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
 
 
 def _not_set_up() -> None:

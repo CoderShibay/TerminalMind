@@ -294,7 +294,7 @@ def _render_interleaved(conn, session_rows, project_filter, days_filter, filter_
             cmd      = (r["command"] or "")
             dur      = _shell_dur(r["duration_ms"])
             exit_c   = r["exit_code"]
-            proj     = (r["cwd"] or "").rstrip("/").split("/")[-1]
+            proj     = (r["cwd"] or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
             proj_str = f"  \033[2m[{proj}]\033[0m" if proj else ""
 
             display_cmd = cmd[:60] + ("…" if len(cmd) > 60 else "")
