@@ -20,6 +20,8 @@ Usage:
     tm shell --failed                Show only commands that failed (exit != 0)
     tm shell --days 7                Last 7 days only
     tm shell --search QUERY          Full-text search across commands
+    tm push SESSION_ID PROJECT         Extract session → append to project Build Log.md
+    tm push SESSION_ID PROJECT --dry-run  Preview without writing
     tm service install               Auto-start server on login (macOS/Linux)
     tm service uninstall             Remove auto-start
     tm service status                Check if background service is running
@@ -31,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
 from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder, shell_commands as shell_idx
-from cli import search, sessions, status, verify, today, week, context, digest, report, history, shell, resume, link
+from cli import search, sessions, status, verify, today, week, context, digest, report, history, shell, resume, link, push
 
 HELP = __doc__
 
@@ -123,6 +125,10 @@ def main():
     elif cmd == "links":
         sync(conn, verbose=False, embed=False)
         link.run(conn, ["list"] + rest)
+
+    elif cmd == "push":
+        sync(conn, verbose=False, embed=False)
+        push.run(conn, rest)
 
     elif cmd == "week":
         sync(conn, verbose=False, embed=False)
