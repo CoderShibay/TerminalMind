@@ -86,6 +86,13 @@ GIT_COMMIT_RE = re.compile(r"git commit", re.IGNORECASE)
 # Line-numbered file content (Read tool result) — not an error
 LINE_NUMBERED_RE = re.compile(r"^\d+\t")
 
+# ANSI escape sequences in terminal output
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mGKHFABCDJ]|\[[0-9;]+m")
+
+
+def _strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
 
 def _extract_commit_msg(command: str) -> str:
     """Pull the commit message out of a git commit command."""
@@ -243,27 +250,39 @@ def _parse_session(jsonl_path: Path) -> dict:
                 if block.get("type") != "tool_result":
                     continue
 
-                text = _extract_text_from_content(block.get("content", ""))
-                if not text or len(errors) >= 5:
+                raw_text = _extract_text_from_content(block.get("content", ""))
+                if not raw_text or len(errors) >= 5:
                     continue
 
-                first_line = text.split("\n")[0]
+                # Strip ANSI before any analysis — terminal output with escape codes
+                # gets flagged as is_error by Claude Code but isn't a real error
+                text = _strip_ansi(raw_text)
+                first_line = text.split("\n")[0].strip()
 
                 # Skip line-numbered file content (Read tool results)
                 if LINE_NUMBERED_RE.match(first_line):
                     continue
 
-                if block.get("is_error"):
-                    # Explicit is_error flag from the API
-                    pending_error = first_line[:120]
-                elif "<tool_use_error>" in text:
-                    # Claude Code error wrapper
-                    m = re.search(r"<tool_use_error>(.*?)</tool_use_error>", text, re.DOTALL)
-                    pending_error = (m.group(1).strip() if m else first_line)[:120]
+                # Skip short/empty lines after stripping
+                if len(first_line) < 10:
+                    continue
+
+                # is_error + tool_use_error tag wrapping the content = definitive
+                starts_with_error_tag = raw_text.strip().startswith("<tool_use_error>")
+                if block.get("is_error") and starts_with_error_tag:
+                    m = re.search(r"<tool_use_error>(.*?)</tool_use_error>", raw_text, re.DOTALL)
+                    msg = _strip_ansi(m.group(1).strip() if m else first_line)[:120]
+                    if msg:
+                        pending_error = msg
+                elif block.get("is_error"):
+                    # is_error alone fires for ANSI output, large responses, etc.
+                    # Only trust it if the FIRST LINE looks like an error — not the full body,
+                    # which may contain session excerpts with incidental error keywords.
+                    if ERROR_PATTERNS.search(first_line):
+                        pending_error = first_line[:120]
                 else:
-                    # Heuristic: require multiple strong error signals, no line numbers
-                    hits = len(ERROR_PATTERNS.findall(text))
-                    if hits >= 3 and not LINE_NUMBERED_RE.match(first_line):
+                    # No error flag — only trigger on first line with strong signals
+                    if ERROR_PATTERNS.search(first_line) and len(first_line) > 15:
                         pending_error = first_line[:120]
 
     return {
@@ -278,9 +297,19 @@ def _parse_session(jsonl_path: Path) -> dict:
 
 # ── Entry formatting ──────────────────────────────────────────────────────────
 
+def _derive_title(db_title: str | None, data: dict) -> str:
+    """Use first real commit message as title — more accurate than tm's auto-title."""
+    for c in data.get("commits", []):
+        if c and "see transcript" not in c:
+            return c[:70]
+    if db_title and len(db_title) > 5:
+        return db_title[:70]
+    return "session"
+
+
 def _format_entry(data: dict, session_id: str, title: str) -> str:
     date = data["date"]
-    short_title = (title or "session")[:60]
+    short_title = _derive_title(title, data)
 
     lines = [f"## {date} — {short_title}"]
     lines.append(f"\n*Session: {session_id[:8]}*\n")
