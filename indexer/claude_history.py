@@ -75,11 +75,14 @@ def run(conn) -> int:
     return len(rows)
 
 
+_SKIP_PARTS = {"Users", "home", "Documents", Path.home().name, ""}
+
+
 def _project_label(path: str | None) -> str | None:
     if not path:
         return None
     for part in reversed(path.rstrip("/").split("/")):
-        if part and part not in ("Users", "alisyed", "Documents", ""):
+        if part and part not in _SKIP_PARTS:
             return part
     return None
 

@@ -5,6 +5,8 @@ from pathlib import Path
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
+_SKIP_PARTS = {"Users", "home", "Documents", Path.home().name, ""}
+
 SKIP_TYPES = {
     "mode", "permission-mode", "file-history-snapshot",
     "attachment", "tool_result", "summary",
@@ -42,7 +44,7 @@ def _project_from_path(file_path: Path) -> str | None:
     parts = decoded.split("/")
     # last meaningful segment = project folder name
     for part in reversed(parts):
-        if part and part not in ("Users", "alisyed"):
+        if part and part not in _SKIP_PARTS:
             return part
     return None
 
@@ -155,7 +157,7 @@ def _project_label(full_path: str | None) -> str | None:
         return None
     parts = full_path.rstrip("/").split("/")
     for part in reversed(parts):
-        if part and part not in ("Users", "alisyed", "Documents", ""):
+        if part and part not in _SKIP_PARTS:
             return part
     return None
 
@@ -172,8 +174,9 @@ def _enrich_projects(conn) -> None:
     history_prompts = conn.execute(
         """SELECT session_id, project, ts
            FROM claude_prompts
-           WHERE project IS NOT NULL AND project != '/Users/alisyed'
-           ORDER BY ts ASC"""
+           WHERE project IS NOT NULL AND project != ?
+           ORDER BY ts ASC""",
+        (str(Path.home()),)
     ).fetchall()
 
     if not history_prompts:

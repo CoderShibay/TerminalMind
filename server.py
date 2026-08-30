@@ -63,9 +63,9 @@ def api_status():
     projects = conn.execute("""
         SELECT project, COUNT(*) as c
         FROM claude_messages
-        WHERE project IS NOT NULL AND project != 'alisyed'
+        WHERE project IS NOT NULL AND project NOT IN (?, 'home', '')
         GROUP BY project ORDER BY c DESC LIMIT 15
-    """).fetchall()
+    """, (Path.home().name,)).fetchall()
 
     # If no project data, derive activity from sessions' first messages
     if not projects:

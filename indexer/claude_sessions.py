@@ -5,13 +5,15 @@ from pathlib import Path
 
 SESSIONS_DIR = Path.home() / ".claude" / "sessions"
 
+_SKIP_PARTS = {"Users", "home", Path.home().name, ""}
+
 
 def _project_from_cwd(cwd: str | None) -> str | None:
     if not cwd:
         return None
     parts = cwd.rstrip("/").split("/")
     for part in reversed(parts):
-        if part and part not in ("Users", "alisyed"):
+        if part and part not in _SKIP_PARTS:
             return part
     return None
 
@@ -60,7 +62,7 @@ def run(conn) -> int:
     ).fetchall()
     for row in prompt_projects:
         label = _project_from_cwd(row["project"])
-        if label and label != "alisyed":
+        if label and label not in _SKIP_PARTS:
             conn.execute(
                 "UPDATE claude_sessions SET project = ?, cwd = ? WHERE session_id = ?",
                 (label, row["project"], row["session_id"]),
