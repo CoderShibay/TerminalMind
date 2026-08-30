@@ -222,7 +222,12 @@ def run(conn, args: list[str]) -> int:
     print()
     print("  " + "─" * W)
     if not has_shell:
-        print("  \033[2mTIME column appears once shell hook is active (source ~/terminalmd/daemon/shell_hook.sh)\033[0m")
+        import platform as _platform
+        if _platform.system() == "Windows":
+            _hook_hint = ". \"$env:USERPROFILE\\.terminalmd\\daemon\\shell_hook.ps1\"  in $PROFILE"
+        else:
+            _hook_hint = "source ~/.terminalmd/daemon/shell_hook.sh  in ~/.zshrc"
+        print(f"  \033[2mTIME column appears once shell hook is active ({_hook_hint})\033[0m")
     print(f"  Use \033[1mtm report --days 7\033[0m for last week, \033[1m--days 90\033[0m for 3 months\n")
 
     return 0

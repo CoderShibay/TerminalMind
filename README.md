@@ -56,7 +56,7 @@ pip install terminalmd
 To log every terminal command you run:
 
 ```bash
-echo 'source ~/terminalmd/daemon/shell_hook.sh' >> ~/.zshrc
+echo 'source ~/.terminalmd/daemon/shell_hook.sh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -90,6 +90,13 @@ tm report --days 7                    # last 7 days
 tm history                            # chronological Claude session timeline
 tm history --shell                    # sessions interleaved with shell commands
 tm history --project Segmentation     # filter by project
+
+# Session identity
+tm session                            # current session ID + title — copies short ID to clipboard
+tm sessions                           # all sessions newest to oldest with titles
+tm sessions --simple                  # clean two-column output: ID  Title
+tm sessions "SpotTrader"              # search by title keyword
+tm sessions "bfad"                    # search by session ID prefix
 
 # Session recovery and linking
 tm resume                             # minimal restart — ~100 tokens, paste into new session
@@ -252,7 +259,7 @@ Claude Code writes your data to disk automatically:
 | `~/.claude/history.jsonl` | Every prompt ever sent | `claude_prompts` |
 | `~/.claude/projects/**/*.jsonl` | Full conversation transcripts | `claude_messages` |
 | `~/.claude/sessions/*.json` | Session metadata | `claude_sessions` |
-| `~/terminalmd/shell_log.jsonl` | Shell commands (from hook) | `shell_commands` |
+| `~/.terminalmd/shell_log.jsonl` | Shell commands (from hook) | `shell_commands` |
 
 TerminalMind reads these files and builds a local SQLite database with:
 - **FTS5 indexes** — fast keyword search across messages, prompts, and shell commands
@@ -281,10 +288,12 @@ Sessions titled by Ollama show `✦`. Without Ollama, titles come from the first
 
 | What | Path |
 |------|------|
-| Database | `~/terminalmd/db/terminalmd.db` |
-| Shell log | `~/terminalmd/shell_log.jsonl` |
+| Install dir | `~/.terminalmd/` (macOS/Linux) · `~\.terminalmd\` (Windows) |
+| Database | `~/.terminalmd/db/terminalmd.db` |
+| Shell log | `~/.terminalmd/shell_log.jsonl` |
 | Embedding model | `~/.cache/huggingface/` (87 MB, one-time download) |
-| CLI | `/usr/local/bin/tm` |
+| CLI | `~/.local/bin/tm` (macOS/Linux) · `~\.local\bin\tm.cmd` (Windows) |
+| Project config | `~/.tm_projects` (optional — custom vault paths for `tm push`) |
 
 Claude's original files in `~/.claude/` are never modified.
 
