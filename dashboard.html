@@ -491,10 +491,12 @@ async function loadStats(){
   document.getElementById('st-a-sess').textContent=fmt(d.all.sessions);
   document.getElementById('st-a-msgs').textContent=fmt(d.all.prompts);
 }
+let linkedSessionIds=new Set();
 async function loadSessions(){
   [allSessions]=await Promise.all([api('/api/sessions?limit=500')]);
-  const pins=await api('/api/pins');
+  const [pins, linkedIds]=await Promise.all([api('/api/pins'), api('/api/linked-ids')]);
   pinnedIds=new Set(pins.map(p=>p.session_id));
+  linkedSessionIds=new Set(linkedIds);
   renderSessions();
   renderPinned(pins);
   loadTags();
@@ -615,6 +617,7 @@ function renderCard(s,isPinnedSection=false){
   const note=s.note||'';
   const tagHtml=tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
   const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#94a3b8] ml-1">✦</span>':'';
+  const isLinked=linkedSessionIds.has(sid);
 
   return `<div class="scard px-4 py-3 fade-in" id="card-${sid}" data-sid="${sid}" onclick="toggleCard('${sid}')">
     <div class="flex items-start gap-3">
@@ -626,6 +629,7 @@ function renderCard(s,isPinnedSection=false){
             <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(title).replace(/'/g,"\\'")}')" title="Rename">✎</button>
           </span>
           <div class="flex items-center gap-2 shrink-0 ml-2">
+            ${isLinked?`<span class="text-[11px] text-[#7c3aed]" title="Linked session — click to see linked sessions">⛓</span>`:''}
             ${note?`<span class="text-[10px] text-[#f59e0b]" title="${esc(note)}">✎</span>`:''}
             <button class="pin-btn text-[14px] ${pinned?'pinned':''}" onclick="event.stopPropagation();togglePin('${sid}')" title="${pinned?'Unpin':'Pin'}">${pinned?'📌':'📍'}</button>
           </div>
@@ -750,18 +754,38 @@ function exportSession(sid){
 async function renderDetail(detailEl, sid){
   detailEl.innerHTML='<div class="text-[#94a3b8] text-sm animate-pulse pt-2">Loading…</div>';
 
-  const [msgs, note, related] = await Promise.all([
+  const [msgs, note, related, linked] = await Promise.all([
     fetch('/api/session/'+sid).then(r=>r.json()),
     api('/api/note/'+sid),
     api('/api/related/'+sid),
+    api('/api/links/'+sid),
   ]);
 
   const noteVal = note.note||'';
-  const relHtml = related.length ? `
+
+  // Manually linked sessions (from `tm link`) — shown first, distinct style
+  const linkedHtml = linked.length ? `
     <div class="mt-4 pt-3 border-t border-[#1e1e30]">
-      <div class="text-[11px] text-[#94a3b8] mb-2">Related sessions</div>
+      <div class="text-[11px] text-[#64748b] mb-2 flex items-center gap-1.5">
+        <span class="text-[#4f46e5]">⛓</span> Linked sessions
+      </div>
       <div class="flex flex-wrap gap-2">
-        ${related.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
+        ${linked.map(r=>{
+          const ltype = r.link_type||'continuation';
+          const badge = ltype!=='continuation'?`<span class="text-[9px] opacity-60 ml-1">${esc(ltype)}</span>`:'';
+          return `<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#a78bfa] hover:text-white bg-[#1e1b3a] hover:bg-[#2d2a4a] border border-[#3d3a6a] rounded-lg px-3 py-1 transition-colors flex items-center gap-1">${esc(r.title||r.session_id.slice(0,8))}${badge}<span class="font-mono text-[10px] text-[#64748b] ml-1">${r.session_id.slice(0,8)}</span></button>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  // Tag-based related sessions (exclude any already shown as linked)
+  const linkedIds = new Set(linked.map(r=>r.session_id));
+  const filteredRelated = related.filter(r=>!linkedIds.has(r.session_id));
+  const relHtml = filteredRelated.length ? `
+    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
+      <div class="text-[11px] text-[#94a3b8] mb-2">Related by tag</div>
+      <div class="flex flex-wrap gap-2">
+        ${filteredRelated.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
       </div>
     </div>` : '';
 
@@ -805,6 +829,7 @@ async function renderDetail(detailEl, sid){
     <div id="note-display-${sid}" class="${noteVal?'':'hidden'} mb-3 bg-[#1a1a10] border border-[#2d2a10] rounded-lg px-3 py-2 text-[#fbbf24] text-[12px]">${esc(noteVal)}</div>
     ${historyBanner}
     <div class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">${convHtml}</div>
+    ${linkedHtml}
     ${relHtml}`;
 }
 

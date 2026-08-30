@@ -61,10 +61,10 @@ def run(conn, args: list[str]) -> int:
                 session_filter = args[i + 1]
         return _show_all(conn, session_filter)
 
-    # tm link ID1 ID2 [--type TYPE] [--note "text"]
+    # tm link ID1 ID2 [ID3 ...] [--type TYPE] [--note "text"]
     if len(args) < 2:
         print("\nUsage:")
-        print("  tm link ID1 ID2                    link two sessions")
+        print("  tm link ID1 ID2 [ID3 ...]          link two or more sessions")
         print("  tm link ID1 ID2 --type related     mark as related (not continuation)")
         print("  tm link ID1 ID2 --note \"text\"      add a note about the link")
         print("  tm link unlink ID1 ID2             remove a link")
@@ -72,62 +72,68 @@ def run(conn, args: list[str]) -> int:
         print("  tm link list --session ID          show links for one session\n")
         return 1
 
-    id1_partial = args[0]
-    id2_partial = args[1]
-    link_type   = "continuation"
-    note        = None
+    # Split positional IDs from flags
+    id_partials: list[str] = []
+    link_type = "continuation"
+    note      = None
 
-    i = 2
+    i = 0
     while i < len(args):
         if args[i] == "--type" and i + 1 < len(args):
             link_type = args[i + 1]; i += 2
         elif args[i] == "--note" and i + 1 < len(args):
             note = args[i + 1]; i += 2
+        elif args[i].startswith("--"):
+            i += 1  # skip unknown flags
         else:
-            i += 1
+            id_partials.append(args[i]); i += 1
 
-    # Resolve partial IDs
-    sid1 = _resolve(conn, id1_partial)
-    sid2 = _resolve(conn, id2_partial)
+    if len(id_partials) < 2:
+        print("\n  Need at least two session IDs.\n")
+        return 1
 
-    if not sid1:
-        print(f"\n  Session not found: {id1_partial}\n")
-        return 1
-    if not sid2:
-        print(f"\n  Session not found: {id2_partial}\n")
-        return 1
-    if sid1 == sid2:
-        print("\n  Cannot link a session to itself.\n")
-        return 1
+    # Resolve all partial IDs
+    resolved: list[str] = []
+    for partial in id_partials:
+        sid = _resolve(conn, partial)
+        if not sid:
+            print(f"\n  Session not found: {partial}\n")
+            return 1
+        if sid in resolved:
+            print(f"\n  Duplicate session ID: {partial}\n")
+            return 1
+        resolved.append(sid)
 
     now = int(time.time() * 1000)
 
-    # Store bidirectionally so graph walks work in both directions
-    conn.execute(
-        """INSERT OR IGNORE INTO session_links
-           (session_id, linked_to, link_type, note, created_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (sid1, sid2, link_type, note, now)
-    )
-    conn.execute(
-        """INSERT OR IGNORE INTO session_links
-           (session_id, linked_to, link_type, note, created_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (sid2, sid1, link_type, note, now)
-    )
+    # Insert a link between every pair so the group is fully connected
+    import itertools
+    pairs_added = 0
+    for sid1, sid2 in itertools.combinations(resolved, 2):
+        conn.execute(
+            """INSERT OR IGNORE INTO session_links
+               (session_id, linked_to, link_type, note, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (sid1, sid2, link_type, note, now)
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO session_links
+               (session_id, linked_to, link_type, note, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (sid2, sid1, link_type, note, now)
+        )
+        pairs_added += 1
     conn.commit()
 
-    t1 = _title(conn, sid1)
-    t2 = _title(conn, sid2)
-
     print()
-    print(f"  \033[32m✓\033[0m  Linked:")
-    print(f"     \033[1m{t1}\033[0m  \033[2m({sid1[:8]})\033[0m")
-    print(f"     \033[1m{t2}\033[0m  \033[2m({sid2[:8]})\033[0m")
+    print(f"  \033[32m✓\033[0m  Linked {len(resolved)} sessions:")
+    for sid in resolved:
+        print(f"     \033[1m{_title(conn, sid)}\033[0m  \033[2m({sid[:8]})\033[0m")
     if note:
         print(f"     \033[33m↳ {note}\033[0m")
     print()
-    print(f"  \033[2mtm context --session {sid1[:8]} will now search both sessions.\033[0m\n")
+    first = resolved[0]
+    print(f"  \033[2mtm context --session {first[:8]} will now search all {len(resolved)} sessions.\033[0m\n")
 
     return 0
 

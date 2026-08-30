@@ -389,6 +389,64 @@ def api_activity():
     return [{"day": r["day"], "count": r["count"]} for r in rows]
 
 
+@app.get("/api/linked-ids")
+def api_linked_ids():
+    """Return set of all session IDs that have at least one manual link."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT session_id FROM session_links"
+    ).fetchall()
+    return [r["session_id"] for r in rows]
+
+
+@app.get("/api/links/{session_id}")
+def api_links(session_id: str):
+    """Return sessions manually linked via `tm link`, with link metadata."""
+    conn = get_conn()
+
+    # Walk the full link graph from this session
+    def linked_ids(sid: str) -> list[str]:
+        rows = conn.execute(
+            """SELECT linked_to FROM session_links WHERE session_id = ?
+               UNION
+               SELECT session_id FROM session_links WHERE linked_to = ?""",
+            (sid, sid)
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    visited: set[str] = set()
+    queue = linked_ids(session_id)
+    while queue:
+        sid = queue.pop()
+        if sid in visited or sid == session_id:
+            continue
+        visited.add(sid)
+        queue.extend(linked_ids(sid))
+
+    if not visited:
+        return []
+
+    results = []
+    for sid in visited:
+        row = conn.execute(
+            """SELECT s.session_id, s.started_at, t.title, t.project_tags,
+                      COUNT(m.id) as msg_count,
+                      sl.link_type, sl.note
+               FROM claude_sessions s
+               LEFT JOIN session_titles t ON t.session_id = s.session_id
+               LEFT JOIN claude_messages m ON m.session_id = s.session_id
+               LEFT JOIN session_links sl ON sl.session_id = ? AND sl.linked_to = s.session_id
+               WHERE s.session_id = ?
+               GROUP BY s.session_id""",
+            (session_id, sid)
+        ).fetchone()
+        if row:
+            results.append(dict(row))
+
+    results.sort(key=lambda r: r.get("started_at") or 0)
+    return results
+
+
 @app.get("/api/related/{session_id}")
 def api_related(session_id: str):
     conn = get_conn()
