@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TerminalMind</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{background:#0d0d12;color:#e2e8f0;font-family:'Inter',system-ui,sans-serif;}
+  .card{background:#14141f;border:1px solid #23233a;border-radius:12px;}
+  .scard{background:#14141f;border:1px solid #23233a;border-radius:10px;transition:border-color .15s,background .15s;cursor:pointer;}
+  .scard:hover{border-color:#4f46e5;background:#17172a;}
+  .scard.expanded{border-color:#4f46e5;background:#17172a;}
+  .scard.focused{outline:2px solid #4f46e5;outline-offset:1px;}
+  .tag{display:inline-flex;align-items:center;background:#1e1e35;border:1px solid #2d2d4d;border-radius:99px;font-size:11px;padding:2px 9px;color:#94a3b8;}
+  .tag.active{background:#3730a3;border-color:#4f46e5;color:#c7d2fe;}
+  mark{background:#fbbf2430;color:#fcd34d;border-radius:2px;padding:0 2px;}
+  input:focus,textarea:focus{outline:none;border-color:#4f46e5;}
+  ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#2d2d4d;border-radius:4px;}
+  .msg-user{border-left:2px solid #4f46e5;}
+  .msg-asst{border-left:2px solid #22c55e;}
+  .msg-tool{border-left:2px solid #f59e0b;}
+  .fade-in{animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+  .spinner{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tab-btn{padding:6px 16px;border-radius:7px;font-size:13px;color:#64748b;cursor:pointer;transition:all .12s;}
+  .tab-btn.on{background:#14141f;color:#e2e8f0;border:1px solid #23233a;}
+  .tab-btn:hover:not(.on){color:#cbd5e1;}
+  .heat-cell{border-radius:2px;transition:opacity .1s;cursor:pointer;}
+  .heat-cell.selected{outline:2px solid #818cf8;outline-offset:1px;}
+  .title-edit-input{background:#0d0d12;border:1px solid #4f46e5;border-radius:5px;color:#fff;font-size:14px;font-weight:500;padding:1px 6px;width:100%;max-width:400px;}
+  .rename-btn{opacity:0;font-size:11px;color:#64748b;margin-left:4px;cursor:pointer;transition:opacity .1s;}
+  .scard:hover .rename-btn{opacity:1;}
+  .heat-cell:hover{opacity:.7;}
+  .pin-btn{opacity:0;transition:opacity .15s;}
+  .scard:hover .pin-btn,.scard.expanded .pin-btn{opacity:1;}
+  .pin-btn.pinned{opacity:1;color:#f59e0b;}
+  .note-area{background:#0d0d12;border:1px solid #23233a;border-radius:7px;color:#e2e8f0;font-size:13px;resize:vertical;width:100%;padding:8px 10px;min-height:60px;}
+  .note-area:focus{border-color:#4f46e5;}
+  .kbd{background:#1e1e30;border:1px solid #2d2d4d;border-radius:4px;font-size:10px;padding:1px 5px;color:#64748b;}
+  .mode-btn{background:#0d0d12;color:#94a3b8;transition:all .1s;cursor:pointer;}
+  .mode-btn.on{background:#4f46e5;color:#fff;}
+  .mode-btn:hover:not(.on){background:#1a1a2e;color:#94a3b8;}
+  .sem-score{display:inline-block;width:32px;height:3px;border-radius:2px;background:#4f46e5;vertical-align:middle;margin-right:4px;opacity:.7;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Header -->
+<div class="sticky top-0 z-20 border-b border-[#1e1e30] px-6 py-3 flex items-center gap-3" style="background:#0d0d12cc;backdrop-filter:blur(16px)">
+  <button onclick="goHome()" class="flex items-center gap-2 mr-3 hover:opacity-80 transition-opacity shrink-0">
+    <div class="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold" style="background:#4f46e5">⚡</div>
+    <span class="font-semibold text-[15px] text-white">TerminalMind</span>
+  </button>
+  <div class="flex gap-0.5">
+    <button onclick="setTab('browse')" id="tab-browse" class="tab-btn on">Browse</button>
+    <button onclick="setTab('search')" id="tab-search" class="tab-btn">Search</button>
+    <button onclick="setTab('shell')"  id="tab-shell"  class="tab-btn">Shell</button>
+  </div>
+  <div class="flex items-center gap-2 ml-auto flex-wrap">
+    <div id="tag-bar" class="flex gap-1.5 flex-wrap items-center">
+      <button id="clear-filter-btn" onclick="clearFilter()" class="hidden text-[11px] text-[#94a3b8] hover:text-[#94a3b8] border border-[#23233a] rounded-md px-2 py-0.5">✕ clear</button>
+    </div>
+    <button onclick="doSync()" id="sync-btn" class="flex items-center gap-1.5 text-[12px] text-[#94a3b8] hover:text-[#94a3b8] transition-colors">
+      <span id="sync-icon" class="text-[14px]">↻</span> Sync
+    </button>
+    <div id="db-pill" class="text-[11px] text-[#94a3b8] font-mono"></div>
+  </div>
+</div>
+
+<!-- Browse Tab -->
+<div id="pane-browse" class="px-6 py-5 max-w-4xl mx-auto">
+
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="s-prompts">—</div>
+      <div class="text-[12px] text-[#94a3b8]">prompts</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="s-messages">—</div>
+      <div class="text-[12px] text-[#94a3b8]">messages</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="s-sessions">—</div>
+      <div class="text-[12px] text-[#94a3b8]">sessions</div>
+    </div>
+  </div>
+
+  <!-- Stats panel -->
+  <div class="card p-4 mb-4" id="stats-panel">
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div>
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">This Week</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-w-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-w-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-[13px] font-medium text-[#818cf8] truncate max-w-[100px]" id="st-w-proj">—</div><div class="text-[11px] text-[#94a3b8]">top project</div></div>
+        </div>
+      </div>
+      <div class="border-l border-[#23233a]">
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">This Month</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-m-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-m-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-[13px] font-medium text-[#818cf8] truncate max-w-[100px]" id="st-m-proj">—</div><div class="text-[11px] text-[#94a3b8]">top project</div></div>
+        </div>
+      </div>
+      <div class="border-l border-[#23233a]">
+        <div class="text-[11px] text-[#94a3b8] uppercase tracking-wider mb-2">All Time</div>
+        <div class="flex items-center justify-center gap-3">
+          <div><div class="text-lg font-bold text-white" id="st-a-sess">—</div><div class="text-[11px] text-[#94a3b8]">sessions</div></div>
+          <div class="w-px h-8 bg-[#23233a]"></div>
+          <div><div class="text-lg font-bold text-white" id="st-a-msgs">—</div><div class="text-[11px] text-[#94a3b8]">prompts</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity heatmap -->
+  <div class="card p-4 mb-5">
+    <div class="text-[12px] text-[#94a3b8] mb-3 flex items-center justify-between">
+      <span>Activity <span class="text-[#94a3b8]">(last 52 weeks)</span>
+        <span id="day-filter-pill" class="hidden ml-2 text-[11px] text-[#818cf8] border border-[#3730a3] rounded-md px-2 py-0.5 cursor-pointer" onclick="clearDayFilter()">
+          <span id="day-filter-label"></span> &nbsp;✕
+        </span>
+      </span>
+      <span class="flex items-center gap-1 text-[11px] text-[#94a3b8]">click a day to filter &nbsp;·&nbsp; less <span class="flex gap-0.5" id="heat-legend-cells"></span> more</span>
+    </div>
+    <div id="heatmap" class="overflow-x-auto"></div>
+  </div>
+
+  <!-- Pinned sessions -->
+  <div id="pinned-section" class="hidden mb-5">
+    <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] mb-2 flex items-center gap-2">
+      <span>📌 Pinned</span>
+    </div>
+    <div id="pinned-list" class="space-y-1.5"></div>
+  </div>
+
+  <!-- Session list -->
+  <div id="session-list" class="space-y-1"></div>
+  <div id="empty-state" class="hidden text-center text-[#94a3b8] py-16 text-sm">No sessions match this filter.</div>
+
+  <!-- Keyboard hint -->
+  <div class="text-center text-[11px] text-[#94a3b8] mt-6 pb-4">
+    <kbd class="kbd">j</kbd> / <kbd class="kbd">k</kbd> navigate &nbsp;·&nbsp;
+    <kbd class="kbd">space</kbd> expand &nbsp;·&nbsp;
+    <kbd class="kbd">p</kbd> pin &nbsp;·&nbsp;
+    <kbd class="kbd">n</kbd> note &nbsp;·&nbsp;
+    <kbd class="kbd">e</kbd> export &nbsp;·&nbsp;
+    <kbd class="kbd">/</kbd> search &nbsp;·&nbsp;
+    <kbd class="kbd">esc</kbd> home
+  </div>
+</div>
+
+<!-- Shell Tab -->
+<div id="pane-shell" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Filters -->
+  <div class="card p-4 mb-4">
+    <div class="flex gap-2 flex-wrap items-center">
+      <input id="sh-q" type="text" placeholder="Search commands…"
+        class="flex-1 min-w-[180px] bg-[#0d0d12] border border-[#23233a] rounded-lg px-4 py-2 text-white text-[14px]"
+        onkeydown="if(event.key==='Enter')loadShell()">
+      <select id="sh-days" onchange="loadShell()"
+        class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2 text-[#94a3b8] text-sm">
+        <option value="1">Today</option>
+        <option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 3 months</option>
+      </select>
+      <select id="sh-project" onchange="loadShell()"
+        class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2 text-[#94a3b8] text-sm">
+        <option value="">All projects</option>
+      </select>
+      <button id="sh-failed-btn" onclick="toggleShellFailed()"
+        class="px-3 py-2 rounded-lg text-sm border border-[#23233a] text-[#94a3b8] transition-colors">
+        Failed only
+      </button>
+      <button onclick="loadShell()"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0" style="background:#4f46e5">
+        Filter
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div id="sh-stats" class="text-[13px] text-[#94a3b8] mb-4 min-h-[20px]"></div>
+
+  <!-- Not set up -->
+  <div id="sh-setup" class="hidden text-center py-20">
+    <div class="text-[#64748b] text-sm space-y-3">
+      <div class="text-2xl mb-3">⚡</div>
+      <div class="text-white font-medium">Shell logging not active</div>
+      <div>Add to <code class="text-[#818cf8]">~/.zshrc</code> and open a new terminal:</div>
+      <code class="block bg-[#14141f] border border-[#23233a] rounded-lg px-4 py-3 text-[#a5b4fc] text-left mx-auto max-w-sm">
+        source ~/terminalmd/daemon/shell_hook.sh
+      </code>
+      <div class="text-[#64748b] text-xs mt-2">Then run <code>tm sync</code> or refresh this tab.</div>
+    </div>
+  </div>
+
+  <!-- Empty -->
+  <div id="sh-empty" class="hidden text-center py-16 text-[#64748b] text-sm">No commands found for this filter.</div>
+
+  <!-- Command list -->
+  <div id="sh-list" class="space-y-0.5 font-mono text-[13px]"></div>
+</div>
+
+<!-- Search Tab -->
+<div id="pane-search" class="px-6 py-5 max-w-4xl mx-auto hidden">
+  <div class="card p-4 mb-5">
+    <div class="flex gap-2">
+      <input id="q" type="text" placeholder="Search across all conversations…"
+        class="flex-1 bg-[#0d0d12] border border-[#23233a] rounded-lg px-4 py-2.5 text-white text-[14px]"
+        onkeydown="if(event.key==='Enter')doSearch()">
+      <select id="q-time" class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-2.5 text-[#94a3b8] text-sm">
+        <option value="">All time</option>
+        <option value="24h">Last 24h</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+      <button onclick="doSearch()" class="px-5 py-2.5 rounded-lg text-sm font-medium text-white shrink-0" style="background:#4f46e5">Search</button>
+    </div>
+    <!-- Mode selector -->
+    <div class="flex items-center gap-3 mt-3">
+      <span class="text-[11px] text-[#94a3b8]">Mode</span>
+      <div class="flex rounded-lg overflow-hidden border border-[#23233a]">
+        <button onclick="setMode('hybrid')"  id="mode-hybrid"  class="mode-btn on  px-3 py-1 text-[12px]">Hybrid</button>
+        <button onclick="setMode('semantic')" id="mode-semantic" class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Semantic</button>
+        <button onclick="setMode('keyword')" id="mode-keyword"  class="mode-btn     px-3 py-1 text-[12px] border-l border-[#23233a]">Keyword</button>
+      </div>
+      <span id="mode-hint" class="text-[11px] text-[#94a3b8]">Finds by meaning + exact words</span>
+      <span class="text-[11px] text-[#94a3b8] ml-auto"><kbd class="kbd">/</kbd> focus &nbsp;·&nbsp; <kbd class="kbd">Enter</kbd> search &nbsp;·&nbsp; <kbd class="kbd">Esc</kbd> home</span>
+    </div>
+  </div>
+  <div id="search-status" class="text-[#94a3b8] text-sm mb-4 min-h-[20px]"></div>
+  <div id="search-results" class="space-y-3"></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allSessions=[], activeTag=null, activeDayFilter=null, expandedSession=null;
+let focusedIdx=-1;
+let pinnedIds=new Set();
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmt=n=>Number(n||0).toLocaleString();
+const api=(url,opts)=>fetch(url,opts).then(r=>r.json());
+
+function relTime(ts){
+  if(!ts)return'?';
+  const d=typeof ts==='number'?new Date(ts):new Date(ts);
+  const diff=Date.now()-d;
+  if(diff<60000)return'just now';
+  if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+  if(diff<172800000)return'yesterday';
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+}
+function dayLabel(ts){
+  if(!ts)return'Unknown';
+  const d=typeof ts==='number'?new Date(ts):new Date(ts);
+  const now=new Date(), diff=now-d;
+  if(diff<86400000&&now.getDate()===d.getDate())return'Today';
+  if(diff<172800000)return'Yesterday';
+  if(diff<604800000)return'This Week';
+  if(diff<2592000000)return'Last Month';
+  return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+}
+function highlight(text,query){
+  if(!query||!text)return esc(text||'');
+  let r=esc(text);
+  query.trim().split(/\s+/).filter(Boolean).forEach(t=>{
+    const re=new RegExp('('+esc(t).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    r=r.replace(re,'<mark>$1</mark>');
+  });
+  return r;
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function setTab(name,push=true){
+  ['browse','search','shell'].forEach(t=>{
+    document.getElementById('pane-'+t).classList.toggle('hidden',t!==name);
+    document.getElementById('tab-'+t).classList.toggle('on',t===name);
+  });
+  if(name==='search')setTimeout(()=>document.getElementById('q').focus(),50);
+  if(name==='shell')loadShell();
+  if(push)history.pushState({tab:name,tag:activeTag},'','#'+name);
+}
+
+// ── Shell tab ──────────────────────────────────────────────────────────────
+let shFailedOnly=false;
+
+function toggleShellFailed(){
+  shFailedOnly=!shFailedOnly;
+  const btn=document.getElementById('sh-failed-btn');
+  btn.style.background=shFailedOnly?'#4f46e5':'';
+  btn.style.color=shFailedOnly?'#fff':'';
+  btn.style.borderColor=shFailedOnly?'#4f46e5':'';
+  loadShell();
+}
+
+async function loadShell(){
+  const q=document.getElementById('sh-q').value.trim();
+  const days=document.getElementById('sh-days').value;
+  const project=document.getElementById('sh-project').value;
+  const params=new URLSearchParams({days,failed:shFailedOnly,limit:300});
+  if(q)params.set('q',q);
+  if(project)params.set('project',project);
+
+  const data=await api('/api/shell?'+params);
+
+  const listEl=document.getElementById('sh-list');
+  const statsEl=document.getElementById('sh-stats');
+  const setupEl=document.getElementById('sh-setup');
+  const emptyEl=document.getElementById('sh-empty');
+
+  if(!data.has_data){
+    setupEl.classList.remove('hidden');
+    listEl.classList.add('hidden');
+    statsEl.textContent='';
+    emptyEl.classList.add('hidden');
+    return;
+  }
+
+  setupEl.classList.add('hidden');
+  listEl.classList.remove('hidden');
+
+  const failPct=data.total>0?Math.round(data.failed_count/data.total*100):0;
+  statsEl.innerHTML=`<span class="text-white">${fmt(data.total)}</span> commands &nbsp;·&nbsp; `+
+    `<span class="${data.failed_count>0?'text-red-400':'text-[#94a3b8]'}">${fmt(data.failed_count)} failed</span>`+
+    (data.failed_count>0?` <span class="text-[#64748b]">(${failPct}%)</span>`:'');
+
+  if(!data.commands.length){
+    emptyEl.classList.remove('hidden');
+    listEl.innerHTML='';
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  // Group by day
+  const byDay={};
+  data.commands.forEach(c=>{
+    const d=new Date(c.ts);
+    const key=d.toISOString().slice(0,10);
+    if(!byDay[key])byDay[key]=[];
+    byDay[key].push(c);
+  });
+
+  function fmtTime(ts){
+    const d=new Date(ts);
+    return d.toTimeString().slice(0,8);
+  }
+  function fmtDur(ms){
+    if(ms==null)return'';
+    if(ms<1000)return ms+'ms';
+    if(ms<60000)return(ms/1000).toFixed(1)+'s';
+    return Math.floor(ms/60000)+'m '+(Math.floor(ms/1000)%60)+'s';
+  }
+  function dayLabel(key){
+    const now=new Date(), d=new Date(key);
+    const today=now.toISOString().slice(0,10);
+    const yest=new Date(now-86400000).toISOString().slice(0,10);
+    if(key===today)return'Today';
+    if(key===yest)return'Yesterday';
+    return d.toLocaleDateString('en-GB',{weekday:'short',month:'short',day:'numeric'});
+  }
+
+  listEl.innerHTML=Object.entries(byDay).map(([day,cmds])=>`
+    <div class="mb-4">
+      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] mb-1.5 pt-1">${dayLabel(day)} <span class="font-normal normal-case text-[#64748b]">(${cmds.length})</span></div>
+      ${cmds.map(c=>{
+        const failed=c.exit_code&&c.exit_code!==0;
+        const proj=(c.cwd||'').split('/').filter(Boolean).pop()||'';
+        const cmd=esc(c.command||'');
+        const dur=fmtDur(c.duration_ms);
+        return`<div class="flex items-baseline gap-3 px-3 py-1 rounded-md hover:bg-[#14141f] transition-colors ${failed?'text-red-400':'text-[#cbd5e1]'}">
+          <span class="text-[#64748b] shrink-0 text-[12px]">${fmtTime(c.ts)}</span>
+          <span class="shrink-0 w-5 text-center text-[12px]">${failed?'✗':'<span class="text-[#4ade80]">✓</span>'}</span>
+          <span class="shrink-0 text-[#64748b] w-12 text-right text-[12px]">${dur}</span>
+          <span class="flex-1 truncate">${cmd}</span>
+          ${proj?`<span class="text-[11px] text-[#4f46e5] shrink-0">[${esc(proj)}]</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+async function loadShellProjects(){
+  const projects=await api('/api/shell/projects').catch(()=>[]);
+  const sel=document.getElementById('sh-project');
+  projects.forEach(p=>{
+    const opt=document.createElement('option');
+    opt.value=p; opt.textContent=p;
+    sel.appendChild(opt);
+  });
+}
+function goHome(){
+  clearFilter(false);
+  if(activeDayFilter){ activeDayFilter=null; document.getElementById('day-filter-pill')?.classList.add('hidden'); document.querySelectorAll('.heat-cell').forEach(el=>el.classList.remove('selected')); }
+  if(expandedSession){
+    document.getElementById('detail-'+expandedSession)?.classList.add('hidden');
+    document.getElementById('card-'+expandedSession)?.classList.remove('expanded');
+    expandedSession=null;
+  }
+  focusedIdx=-1;
+  setTab('browse');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+window.addEventListener('popstate',e=>{
+  const s=e.state||{tab:'browse',tag:null};
+  if(s.tag!==activeTag){activeTag=s.tag;document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);renderSessions();}
+  setTab(s.tab||'browse',false);
+});
+
+// ── Tags ───────────────────────────────────────────────────────────────────
+async function loadTags(){
+  const tags=await api('/api/tags');
+  const bar=document.getElementById('tag-bar');
+  const existing=bar.querySelector('#clear-filter-btn');
+  bar.innerHTML='';
+  if(existing)bar.appendChild(existing);
+  tags.forEach(t=>{
+    const btn=document.createElement('button');
+    btn.onclick=()=>filterTag(t.tag);
+    btn.id='tag-'+t.tag;
+    btn.className='tag';
+    btn.innerHTML=`${esc(t.tag)} <span class="text-[#94a3b8] ml-1">${t.count}</span>`;
+    bar.appendChild(btn);
+  });
+  bar.appendChild(existing||document.getElementById('clear-filter-btn'));
+}
+function filterTag(tag){
+  activeTag=activeTag===tag?null:tag;
+  document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));
+  if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');
+  document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);
+  history.pushState({tab:'browse',tag:activeTag},'','#browse');
+  renderSessions();
+}
+function clearFilter(rerender=true){
+  activeTag=null;
+  document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));
+  document.getElementById('clear-filter-btn').classList.add('hidden');
+  if(rerender)renderSessions();
+}
+
+function filterDay(dateStr){
+  activeDayFilter = activeDayFilter===dateStr ? null : dateStr;
+  // Update highlighted cell
+  document.querySelectorAll('.heat-cell').forEach(el=>el.classList.remove('selected'));
+  if(activeDayFilter){
+    document.getElementById('hcell-'+activeDayFilter)?.classList.add('selected');
+    document.getElementById('day-filter-label').textContent=activeDayFilter;
+    document.getElementById('day-filter-pill').classList.remove('hidden');
+  } else {
+    document.getElementById('day-filter-pill').classList.add('hidden');
+  }
+  renderSessions();
+}
+
+function clearDayFilter(){
+  filterDay(null);
+}
+
+// ── Status + sessions ──────────────────────────────────────────────────────
+async function loadStatus(){
+  const d=await api('/api/status');
+  document.getElementById('s-prompts').textContent=fmt(d.total_prompts);
+  document.getElementById('s-messages').textContent=fmt(d.total_messages);
+  document.getElementById('s-sessions').textContent=fmt(d.total_sessions);
+  document.getElementById('db-pill').textContent=d.db_size_kb+' KB';
+}
+
+async function loadStats(){
+  const d=await api('/api/stats');
+  document.getElementById('st-w-sess').textContent=fmt(d.week.sessions);
+  document.getElementById('st-w-msgs').textContent=fmt(d.week.messages);
+  document.getElementById('st-w-proj').textContent=d.week.top_project||'—';
+  document.getElementById('st-m-sess').textContent=fmt(d.month.sessions);
+  document.getElementById('st-m-msgs').textContent=fmt(d.month.messages);
+  document.getElementById('st-m-proj').textContent=d.month.top_project||'—';
+  document.getElementById('st-a-sess').textContent=fmt(d.all.sessions);
+  document.getElementById('st-a-msgs').textContent=fmt(d.all.prompts);
+}
+let linkedSessionIds=new Set();
+async function loadSessions(){
+  [allSessions]=await Promise.all([api('/api/sessions?limit=500')]);
+  const [pins, linkedIds]=await Promise.all([api('/api/pins'), api('/api/linked-ids')]);
+  pinnedIds=new Set(pins.map(p=>p.session_id));
+  linkedSessionIds=new Set(linkedIds);
+  renderSessions();
+  renderPinned(pins);
+  loadTags();
+}
+
+// ── Heatmap ────────────────────────────────────────────────────────────────
+async function loadHeatmap(){
+  const data=await api('/api/activity');
+  const byDay={};
+  data.forEach(r=>{ byDay[r.day]=r.count; });
+
+  const today=new Date();
+  const WEEKS=52;
+  // start from Sunday 52 weeks ago
+  const startDate=new Date(today);
+  startDate.setDate(startDate.getDate()-WEEKS*7-startDate.getDay());
+
+  const maxCount=Math.max(...Object.values(byDay),1);
+  const levels=['#1a1a2e','#1e1e6e','#3730a3','#4f46e5','#818cf8'];
+
+  // Build 7×52 grid (rows=days of week, cols=weeks)
+  const grid=document.getElementById('heatmap');
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  const W=10, GAP=2, LABEL=14;
+  svg.setAttribute('width',(WEEKS*(W+GAP)+LABEL)+'px');
+  svg.setAttribute('height',(7*(W+GAP)+16)+'px');
+
+  const dayNames=['S','M','T','W','T','F','S'];
+  [1,3,5].forEach(d=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x','0'); t.setAttribute('y',(d*(W+GAP)+W)+'px');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#64748b');
+    t.textContent=dayNames[d]; svg.appendChild(t);
+  });
+
+  const months={};
+  for(let w=0;w<WEEKS;w++){
+    for(let d=0;d<7;d++){
+      const date=new Date(startDate);
+      date.setDate(startDate.getDate()+w*7+d);
+      if(date>today)continue;
+      const key=date.toISOString().slice(0,10);
+      const count=byDay[key]||0;
+      const level=count===0?0:Math.min(4,Math.ceil(count/maxCount*4));
+      const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x',(LABEL+w*(W+GAP))+'px');
+      rect.setAttribute('y',(d*(W+GAP))+'px');
+      rect.setAttribute('width',W); rect.setAttribute('height',W);
+      rect.setAttribute('rx','2'); rect.setAttribute('fill',levels[level]);
+      rect.setAttribute('title',`${key}: ${count} messages — click to filter`);
+      rect.setAttribute('id','hcell-'+key);
+      rect.classList.add('heat-cell');
+      if(count>0) rect.addEventListener('click',()=>filterDay(key));
+      svg.appendChild(rect);
+      const m=date.toLocaleString('en-GB',{month:'short'});
+      if(!months[m]&&d===0)months[m]=w;
+    }
+  }
+  // Month labels
+  Object.entries(months).forEach(([m,w])=>{
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',(LABEL+w*(W+GAP))+'px');
+    t.setAttribute('y',(7*(W+GAP)+14)+'px');
+    t.setAttribute('font-size','9'); t.setAttribute('fill','#94a3b8');
+    t.textContent=m; svg.appendChild(t);
+  });
+
+  grid.innerHTML=''; grid.appendChild(svg);
+
+  // Legend cells
+  document.getElementById('heat-legend-cells').innerHTML=
+    levels.map(c=>`<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c}"></span>`).join('');
+}
+
+// ── Pinned section ─────────────────────────────────────────────────────────
+function renderPinned(pins){
+  const sec=document.getElementById('pinned-section');
+  const list=document.getElementById('pinned-list');
+  if(!pins.length){sec.classList.add('hidden');return;}
+  sec.classList.remove('hidden');
+  list.innerHTML=pins.map(p=>renderCard(p,true)).join('');
+}
+
+// ── Session cards ──────────────────────────────────────────────────────────
+function renderSessions(){
+  const list=document.getElementById('session-list');
+  const empty=document.getElementById('empty-state');
+  let sessions=allSessions.filter(s=>!pinnedIds.has(s.session_id));
+  if(activeTag)sessions=sessions.filter(s=>(s.project_tags||'').includes(activeTag));
+  if(activeDayFilter)sessions=sessions.filter(s=>{
+    if(!s.started_at)return false;
+    const d=new Date(s.started_at);
+    return d.toISOString().slice(0,10)===activeDayFilter;
+  });
+  if(!sessions.length){list.innerHTML='';empty.classList.remove('hidden');return;}
+  empty.classList.add('hidden');
+
+  const groups={};
+  sessions.forEach(s=>{const g=dayLabel(s.started_at);if(!groups[g])groups[g]=[];groups[g].push(s);});
+  const ORDER=['Today','Yesterday','This Week','Last Month'];
+  const sorted=Object.keys(groups).sort((a,b)=>{const ia=ORDER.indexOf(a),ib=ORDER.indexOf(b);if(ia!==-1&&ib!==-1)return ia-ib;if(ia!==-1)return -1;if(ib!==-1)return 1;return 0;});
+
+  list.innerHTML=sorted.map(g=>`
+    <div class="mb-5">
+      <div class="text-[11px] font-semibold uppercase tracking-widest text-[#94a3b8] py-2 mb-1.5 sticky top-[52px] z-10" style="background:#0d0d12cc;backdrop-filter:blur(8px)">${esc(g)}</div>
+      <div class="space-y-1.5">${groups[g].map(s=>renderCard(s)).join('')}</div>
+    </div>`).join('');
+  focusedIdx=-1;
+}
+
+function renderCard(s,isPinnedSection=false){
+  const sid=s.session_id;
+  const title=s.title||'Untitled session';
+  const tags=(s.project_tags||'').split(',').filter(Boolean);
+  const dot=s.status==='active'?'bg-green-500':s.status==='busy'?'bg-yellow-500':'bg-[#334155]';
+  const historyOnly=s.kind==='history-only';
+  const pinned=pinnedIds.has(sid);
+  const note=s.note||'';
+  const tagHtml=tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
+  const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#94a3b8] ml-1">✦</span>':'';
+  const isLinked=linkedSessionIds.has(sid);
+
+  return `<div class="scard px-4 py-3 fade-in" id="card-${sid}" data-sid="${sid}" onclick="toggleCard('${sid}')">
+    <div class="flex items-start gap-3">
+      <div class="w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${dot}"></div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 justify-between">
+          <span class="flex items-center gap-1 min-w-0" id="title-wrap-${sid}">
+            <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(title)}${methodBadge}${historyOnly?' <span class="text-[10px] text-[#94a3b8] border border-[#2d2d4d] rounded px-1.5 py-0.5 ml-1">prompts only</span>':''}</span>
+            <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(title).replace(/'/g,"\\'")}')" title="Rename">✎</button>
+          </span>
+          <div class="flex items-center gap-2 shrink-0 ml-2">
+            ${isLinked?`<span class="text-[11px] text-[#7c3aed]" title="Linked session — click to see linked sessions">⛓</span>`:''}
+            ${note?`<span class="text-[10px] text-[#f59e0b]" title="${esc(note)}">✎</span>`:''}
+            <button class="pin-btn text-[14px] ${pinned?'pinned':''}" onclick="event.stopPropagation();togglePin('${sid}')" title="${pinned?'Unpin':'Pin'}">${pinned?'📌':'📍'}</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-[12px] text-[#94a3b8] mt-0.5">
+          <span>${relTime(s.started_at)}</span><span>·</span>
+          <span>${s.msg_count||0} msgs</span><span>·</span>
+          <span class="font-mono text-[11px] text-[#4f46e5] cursor-pointer hover:text-[#818cf8]" title="Click to copy — use with: tm context --session ${sid.slice(0,8)}" onclick="event.stopPropagation();navigator.clipboard.writeText('${sid.slice(0,8)}');this.textContent='✓';setTimeout(()=>this.textContent='${sid.slice(0,8)}',1200)">${sid.slice(0,8)}</span>
+        </div>
+        ${tagHtml?`<div class="flex gap-1.5 mt-1.5 flex-wrap">${tagHtml}</div>`:''}
+      </div>
+    </div>
+    <div id="detail-${sid}" class="hidden mt-4 pt-4 border-t border-[#1e1e30]"></div>
+  </div>`;
+}
+
+// ── Expand card ────────────────────────────────────────────────────────────
+async function toggleCard(sid){
+  if(window.getSelection().toString().length>0)return;
+  const card=document.getElementById('card-'+sid);
+  const detail=document.getElementById('detail-'+sid);
+  if(!detail.classList.contains('hidden')){
+    detail.classList.add('hidden');card.classList.remove('expanded');
+    if(expandedSession===sid)expandedSession=null;return;
+  }
+  if(expandedSession&&expandedSession!==sid){
+    document.getElementById('detail-'+expandedSession)?.classList.add('hidden');
+    document.getElementById('card-'+expandedSession)?.classList.remove('expanded');
+  }
+  expandedSession=sid;card.classList.add('expanded');
+  fetch('/api/view/'+sid,{method:'POST'});
+
+  if(detail.dataset.loaded){detail.classList.remove('hidden');return;}
+  detail.dataset.loaded='1';
+  detail.classList.remove('hidden');
+  await renderDetail(detail, sid);
+}
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+function openNote(sid){
+  document.getElementById('note-editor-'+sid)?.classList.remove('hidden');
+  document.getElementById('note-text-'+sid)?.focus();
+}
+function closeNote(sid){
+  document.getElementById('note-editor-'+sid)?.classList.add('hidden');
+}
+async function saveNote(sid){
+  const text=document.getElementById('note-text-'+sid)?.value||'';
+  await fetch('/api/note/'+sid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:text})});
+  closeNote(sid);
+  const display=document.getElementById('note-display-'+sid);
+  const btn=document.getElementById('note-btn-'+sid);
+  if(text){display.innerHTML=esc(text);display.classList.remove('hidden');if(btn)btn.textContent='✎ Edit note';}
+  else{display.classList.add('hidden');if(btn)btn.textContent='+ Add note';}
+  // Refresh sessions to update note indicator
+  await loadSessions();
+}
+
+// ── Pin ────────────────────────────────────────────────────────────────────
+async function togglePin(sid){
+  const res=await fetch('/api/pin/'+sid,{method:'POST'}).then(r=>r.json());
+  if(res.pinned)pinnedIds.add(sid);else pinnedIds.delete(sid);
+  const pins=await api('/api/pins');
+  pinnedIds=new Set(pins.map(p=>p.session_id));
+  renderPinned(pins);
+  renderSessions();
+}
+
+// ── Inline rename ─────────────────────────────────────────────────────────
+function startRename(sid, currentTitle){
+  const wrap=document.getElementById('title-wrap-'+sid);
+  if(!wrap)return;
+  wrap.innerHTML=`
+    <input class="title-edit-input" id="rename-input-${sid}"
+      value="${esc(currentTitle)}"
+      onclick="event.stopPropagation()"
+      onkeydown="handleRenameKey(event,'${sid}')"
+      onblur="cancelRename('${sid}','${esc(currentTitle).replace(/'/g,"\\'")}')" />`;
+  const input=document.getElementById('rename-input-'+sid);
+  input?.focus(); input?.select();
+}
+
+function handleRenameKey(e, sid){
+  if(e.key==='Enter'){ e.preventDefault(); saveRename(sid); }
+  if(e.key==='Escape'){ e.preventDefault(); e.target.blur(); }
+}
+
+async function saveRename(sid){
+  const input=document.getElementById('rename-input-'+sid);
+  if(!input)return;
+  const newTitle=input.value.trim();
+  if(!newTitle){cancelRename(sid,'');return;}
+  const res=await fetch('/api/rename/'+sid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newTitle})});
+  const data=await res.json();
+  if(data.ok){
+    // Update in allSessions so the card re-renders correctly
+    const s=allSessions.find(s=>s.session_id===sid);
+    if(s) s.title=newTitle;
+    // Update the DOM directly (faster than full re-render)
+    const wrap=document.getElementById('title-wrap-'+sid);
+    if(wrap) wrap.innerHTML=`
+      <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(newTitle)} <span class="text-[10px] text-[#94a3b8] ml-1">✏</span></span>
+      <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(newTitle).replace(/'/g,"\\'")}')" title="Rename">✎</button>`;
+  }
+}
+
+function cancelRename(sid, originalTitle){
+  const wrap=document.getElementById('title-wrap-'+sid);
+  if(!wrap||!wrap.querySelector('input'))return;
+  wrap.innerHTML=`
+    <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(originalTitle)}</span>
+    <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(originalTitle).replace(/'/g,"\\'")}')" title="Rename">✎</button>`;
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportSession(sid){
+  const a=document.createElement('a');
+  a.href='/api/export/'+sid;a.click();
+}
+
+// ── Shared detail renderer (used by both Browse and Search) ────────────────
+async function renderDetail(detailEl, sid){
+  detailEl.innerHTML='<div class="text-[#94a3b8] text-sm animate-pulse pt-2">Loading…</div>';
+
+  const [msgs, note, related, linked] = await Promise.all([
+    fetch('/api/session/'+sid).then(r=>r.json()),
+    api('/api/note/'+sid),
+    api('/api/related/'+sid),
+    api('/api/links/'+sid),
+  ]);
+
+  const noteVal = note.note||'';
+
+  // Manually linked sessions (from `tm link`) — shown first, distinct style
+  const linkedHtml = linked.length ? `
+    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
+      <div class="text-[11px] text-[#64748b] mb-2 flex items-center gap-1.5">
+        <span class="text-[#4f46e5]">⛓</span> Linked sessions
+      </div>
+      <div class="flex flex-wrap gap-2">
+        ${linked.map(r=>{
+          const ltype = r.link_type||'continuation';
+          const badge = ltype!=='continuation'?`<span class="text-[9px] opacity-60 ml-1">${esc(ltype)}</span>`:'';
+          return `<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#a78bfa] hover:text-white bg-[#1e1b3a] hover:bg-[#2d2a4a] border border-[#3d3a6a] rounded-lg px-3 py-1 transition-colors flex items-center gap-1">${esc(r.title||r.session_id.slice(0,8))}${badge}<span class="font-mono text-[10px] text-[#64748b] ml-1">${r.session_id.slice(0,8)}</span></button>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  // Tag-based related sessions (exclude any already shown as linked)
+  const linkedIds = new Set(linked.map(r=>r.session_id));
+  const filteredRelated = related.filter(r=>!linkedIds.has(r.session_id));
+  const relHtml = filteredRelated.length ? `
+    <div class="mt-4 pt-3 border-t border-[#1e1e30]">
+      <div class="text-[11px] text-[#94a3b8] mb-2">Related by tag</div>
+      <div class="flex flex-wrap gap-2">
+        ${filteredRelated.map(r=>`<button onclick="toggleCard('${r.session_id}')" class="text-[12px] text-[#4f46e5] hover:text-[#818cf8] border border-[#23233a] rounded-lg px-3 py-1 transition-colors">${esc(r.title||r.session_id.slice(0,8))}</button>`).join('')}
+      </div>
+    </div>` : '';
+
+  // Check if this is a history-only session (prompts only, no responses)
+  const isHistoryOnly = msgs.length > 0 && msgs.every(m => m.role === 'user' && !m.tool_name);
+  const countEl = document.getElementById('detail-msgcount-'+sid);
+  if(countEl) countEl.textContent = msgs.length + ' messages';
+  const historyBanner = isHistoryOnly
+    ? `<div class="mb-3 text-[12px] text-[#94a3b8] bg-[#1a1a2e] border border-[#2d2d4d] rounded-lg px-3 py-2">
+        This session predates transcript saving — only your prompts are available, not Claude's responses.
+       </div>` : '';
+
+  const convHtml = msgs.map(m=>{
+    // Tool call (assistant decided to use a tool)
+    if(m.tool_name && !m.content_text)
+      return `<div class="msg-tool pl-3 py-1"><span class="text-[#f59e0b] text-[10px] font-bold font-mono mr-2">TOOL</span><span class="text-[#94a3b8] text-[12px]">${esc(m.tool_name)}</span></div>`;
+    // Tool result (what the tool returned — was wrongly shown as YOU before)
+    if(m.role==='tool_result'){
+      const out=(m.content_text||'').trim().slice(0,200);
+      const more=(m.content_text||'').length>200?`<span class="text-[#94a3b8]"> …</span>`:'';
+      return `<div class="msg-tool pl-3 py-1"><span class="text-[#94a3b8] text-[10px] font-bold font-mono mr-2">OUT </span><span class="text-[#94a3b8] text-[12px] font-mono leading-relaxed">${esc(out)}${more}</span></div>`;
+    }
+    const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+    const text=(m.content_text||'').trim().slice(0,600);
+    const more=(m.content_text||'').length>600?`<span class="text-[#94a3b8]"> …more</span>`:'';
+    return `<div class="${cls} pl-3 py-1.5"><span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span><span class="text-[#cbd5e1] text-[12px] leading-relaxed">${esc(text)}${more}</span></div>`;
+  }).join('');
+
+  detailEl.innerHTML = `
+    <div class="flex items-center gap-2 mb-3 pt-1">
+      <span class="text-[#64748b] text-[12px] mr-2" id="detail-msgcount-${sid}"></span>      <button onclick="exportSession('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded-lg px-3 py-1 transition-colors font-medium">↓ Export .md</button>
+      <button onclick="openNote('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded-lg px-3 py-1 transition-colors" id="note-btn-${sid}">${noteVal?'✎ Edit note':'+ Add note'}</button>
+    </div>
+    <div id="note-editor-${sid}" class="hidden mb-3">
+      <textarea class="note-area" id="note-text-${sid}" placeholder="Add a note about this session…">${esc(noteVal)}</textarea>
+      <div class="flex gap-2 mt-1.5">
+        <button onclick="saveNote('${sid}')" class="text-[12px] text-white px-3 py-1 rounded-lg" style="background:#4f46e5">Save</button>
+        <button onclick="closeNote('${sid}')" class="text-[12px] text-[#94a3b8] hover:text-white px-3 py-1 rounded-lg border border-[#23233a]">Cancel</button>
+      </div>
+    </div>
+    <div id="note-display-${sid}" class="${noteVal?'':'hidden'} mb-3 bg-[#1a1a10] border border-[#2d2a10] rounded-lg px-3 py-2 text-[#fbbf24] text-[12px]">${esc(noteVal)}</div>
+    ${historyBanner}
+    <div class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">${convHtml}</div>
+    ${linkedHtml}
+    ${relHtml}`;
+}
+
+// ── Toggle search result card (separate IDs from browse cards) ─────────────
+let expandedSearchSession = null;
+async function toggleSearchCard(sid){
+  if(window.getSelection().toString().length>0)return;
+  const card   = document.getElementById('sr-card-'+sid);
+  const detail = document.getElementById('sr-detail-'+sid);
+  if(!detail) return;
+
+  if(!detail.classList.contains('hidden')){
+    detail.classList.add('hidden');
+    card?.classList.remove('expanded');
+    expandedSearchSession = null;
+    return;
+  }
+  // Collapse previously expanded search card
+  if(expandedSearchSession && expandedSearchSession !== sid){
+    document.getElementById('sr-detail-'+expandedSearchSession)?.classList.add('hidden');
+    document.getElementById('sr-card-'+expandedSearchSession)?.classList.remove('expanded');
+  }
+  expandedSearchSession = sid;
+  card?.classList.add('expanded');
+  fetch('/api/view/'+sid, {method:'POST'});
+
+  if(detail.dataset.loaded){detail.classList.remove('hidden');return;}
+  detail.dataset.loaded='1';
+  detail.classList.remove('hidden');
+  await renderDetail(detail, sid);
+}
+
+// ── Search mode ─────────────────────────────────────────────────────────────
+let searchMode = 'hybrid';
+const modeHints = {
+  hybrid:  'Finds by meaning + exact words',
+  semantic:'Finds by meaning — works without knowing exact words',
+  keyword: 'Finds exact words and phrases only',
+};
+function setMode(m){
+  searchMode=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('mode-'+m).classList.add('on');
+  document.getElementById('mode-hint').textContent=modeHints[m];
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+async function doSearch(){
+  const q    = document.getElementById('q').value.trim();
+  const last = document.getElementById('q-time').value;
+  if(!q){document.getElementById('search-status').textContent='Enter a query.';return;}
+  document.getElementById('search-status').textContent='Searching…';
+  document.getElementById('search-results').innerHTML='';
+
+  let kwResults=[], semResults=[];
+
+  if(searchMode==='keyword'||searchMode==='hybrid'){
+    kwResults = await api('/api/search?'+new URLSearchParams({q,last,limit:40}));
+  }
+  if(searchMode==='semantic'||searchMode==='hybrid'){
+    semResults = await api('/api/semantic?'+new URLSearchParams({q,limit:30}));
+  }
+
+  // Hybrid: merge by session, RRF-style dedup
+  // Build unified result list keyed by session_id
+  const bySession={};
+
+  kwResults.forEach((r,rank)=>{
+    const sid=r.session_id;
+    if(!bySession[sid])bySession[sid]={msgs:[],semScore:0,kwRank:rank,sources:new Set()};
+    bySession[sid].msgs.push({...r,source:'keyword'});
+    bySession[sid].sources.add('keyword');
+  });
+
+  semResults.forEach(r=>{
+    const sid=r.session_id;
+    if(!bySession[sid])bySession[sid]={msgs:[],semScore:0,kwRank:999,sources:new Set()};
+    // Only add if not already from keyword (avoid dup messages)
+    const alreadyHas=bySession[sid].msgs.some(m=>m.text===r.text);
+    if(!alreadyHas)bySession[sid].msgs.push({...r,source:'semantic'});
+    bySession[sid].semScore=Math.max(bySession[sid].semScore,r.score||0);
+    bySession[sid].sources.add('semantic');
+  });
+
+  const sessions=Object.entries(bySession);
+  if(!sessions.length){
+    document.getElementById('search-status').textContent=`No results for "${q}"`;
+    return;
+  }
+
+  // Sort: semantic score wins for semantic-only; keyword rank wins for keyword-only; hybrid blends
+  sessions.sort(([,a],[,b])=>{
+    const scoreA = a.semScore*0.6 + (1/(1+a.kwRank))*0.4;
+    const scoreB = b.semScore*0.6 + (1/(1+b.kwRank))*0.4;
+    return scoreB-scoreA;
+  });
+
+  const total=sessions.reduce((s,[,v])=>s+v.msgs.length,0);
+  document.getElementById('search-status').textContent=
+    `${total} result(s) across ${sessions.length} session(s) — ${searchMode} mode`;
+
+  document.getElementById('search-results').innerHTML=sessions.map(([sid,data])=>{
+    const session=allSessions.find(s=>s.session_id===sid);
+    const title=session?.title||data.msgs[0]?.title||sid.slice(0,8)+'…';
+    const tags=(session?.project_tags||'').split(',').filter(Boolean).map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
+    const isSem=data.sources.has('semantic');
+    const semBadge=isSem?`<span class="text-[10px] text-[#818cf8] border border-[#3730a3] rounded px-1.5 py-0.5">∿ semantic</span>`:'';
+    const first=data.msgs[0];
+
+    const msgHtml=data.msgs.slice(0,6).map(m=>{
+      const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+      const txt=(m.text||m.content_text||'').slice(0,380);
+      // Show similarity bar for semantic results
+      const semBar=m.source==='semantic'&&m.score
+        ?`<span class="sem-score" style="width:${Math.round(m.score*40)}px" title="similarity: ${Math.round(m.score*100)}%"></span>`:'';
+      return`<div class="${cls} pl-3 py-1.5">
+        <span class="${col} text-[10px] font-bold font-mono mr-2">${lbl}</span>
+        ${semBar}<span class="text-[#cbd5e1] text-[12px] leading-relaxed">${highlight(txt,searchMode!=='semantic'?q:'')}</span>
+      </div>`;
+    }).join('');
+
+    const sSession=allSessions.find(s=>s.session_id===sid);
+    const totalMsgs=sSession?.msg_count||0;
+    const isPinned=pinnedIds.has(sid);
+    return`<div class="scard p-4 fade-in" id="sr-card-${sid}" data-sid="${sid}" onclick="toggleSearchCard('${sid}')">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap min-w-0">
+          <span class="text-white text-[13px] font-medium truncate">${esc(title)}</span>
+          <span class="text-[10px] font-mono text-[#4f46e5] bg-[#1e1e35] border border-[#2d2d4d] rounded px-1.5 py-0.5 cursor-pointer shrink-0" title="Click to copy session ID" onclick="event.stopPropagation();navigator.clipboard.writeText('${sid.slice(0,8)}');this.textContent='✓ copied';setTimeout(()=>this.textContent='${sid.slice(0,8)}',1200)">${sid.slice(0,8)}</span>
+          ${tags}${semBadge}
+        </div>
+        <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
+          <span class="text-[#94a3b8] text-[12px]">${relTime(first?.ts)}</span>
+          <span class="text-[#94a3b8] text-[12px]">${totalMsgs} msgs</span>
+          <button onclick="event.stopPropagation();togglePin('${sid}')" class="text-[14px] transition-colors ${isPinned?'text-[#f59e0b]':'text-[#64748b] hover:text-[#94a3b8]'} " title="${isPinned?'Unpin':'Pin'}">
+            ${isPinned?'📌':'📍'}
+          </button>
+          <button onclick="exportSession('${sid}')" class="text-[11px] text-[#94a3b8] hover:text-white border border-[#3d3d5c] rounded px-2 py-0.5 font-medium">↓ md</button>
+        </div>
+      </div>
+      <div class="space-y-1.5">${msgHtml}</div>
+      ${data.msgs.length>6?`<div class="text-[#94a3b8] text-[11px] mt-1.5">+${data.msgs.length-6} more — click to expand full conversation</div>`:`<div class="text-[#94a3b8] text-[11px] mt-1.5">Click to expand full conversation</div>`}
+      <div id="sr-detail-${sid}" class="hidden mt-4 pt-4 border-t border-[#1e1e30]"></div>
+    </div>`;
+  }).join('');
+}
+
+// ── Sync ───────────────────────────────────────────────────────────────────
+async function doSync(){
+  const icon=document.getElementById('sync-icon');
+  icon.classList.add('spinner');document.getElementById('sync-btn').style.pointerEvents='none';
+  try{await api('/api/sync');await Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats()]);}
+  finally{icon.classList.remove('spinner');document.getElementById('sync-btn').style.pointerEvents='';icon.textContent='✓';setTimeout(()=>{icon.textContent='↻';},1500);}
+}
+
+// ── Keyboard navigation ────────────────────────────────────────────────────
+function visibleCards(){
+  return [...document.querySelectorAll('#session-list .scard, #pinned-list .scard')];
+}
+function setFocus(idx){
+  const cards=visibleCards();
+  if(!cards.length)return;
+  focusedIdx=Math.max(0,Math.min(idx,cards.length-1));
+  cards.forEach((c,i)=>c.classList.toggle('focused',i===focusedIdx));
+  cards[focusedIdx].scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+document.addEventListener('keydown',e=>{
+  const inInput=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA';
+  if(e.key==='/'&&!inInput){e.preventDefault();setTab('search');return;}
+  if(e.key==='Escape'){if(!inInput){goHome();}return;}
+  if(inInput)return;
+
+  const pane=document.getElementById('pane-browse');
+  if(pane.classList.contains('hidden'))return;
+
+  const cards=visibleCards();
+  if(e.key==='j'||e.key==='ArrowDown'){e.preventDefault();setFocus(focusedIdx<0?0:focusedIdx+1);}
+  else if(e.key==='k'||e.key==='ArrowUp'){e.preventDefault();setFocus(Math.max(0,focusedIdx-1));}
+  else if((e.key===' '||e.key==='Enter')&&focusedIdx>=0){
+    e.preventDefault();
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)toggleCard(sid);
+  }
+  else if(e.key==='p'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)togglePin(sid);
+  }
+  else if(e.key==='n'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid){
+      if(!expandedSession||expandedSession!==sid)toggleCard(sid).then(()=>openNote(sid));
+      else openNote(sid);
+    }
+  }
+  else if(e.key==='e'&&focusedIdx>=0){
+    const sid=cards[focusedIdx]?.dataset?.sid;
+    if(sid)exportSession(sid);
+  }
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+history.replaceState({tab:'browse',tag:null},'','#browse');
+Promise.all([loadStatus(),loadSessions(),loadHeatmap(),loadStats(),loadShellProjects()]);
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "terminalmd"
@@ -31,15 +31,22 @@ dependencies = [
 dev = ["pytest", "httpx"]
 
 [project.scripts]
-tm = "terminalmd.main:main"
+# main.py is installed as the 'main' module via py-modules below
+tm = "main:main"
 
 [project.urls]
 Homepage = "https://github.com/CoderShibay/terminalmd"
 Issues   = "https://github.com/CoderShibay/terminalmd/issues"
 
+[tool.setuptools]
+# Root-level .py files installed as top-level modules
+py-modules = ["main", "server", "service", "paths"]
+
 [tool.setuptools.packages.find]
+# cli/, indexer/, db/ all have __init__.py so setuptools finds them automatically
 where = ["."]
-include = ["terminalmd*"]
+exclude = ["tests*", "*.egg-info"]
 
 [tool.setuptools.package-data]
-terminalmd = ["db/schema.sql", "dashboard.html"]
+# dashboard.html lives in db/ so it travels with the package on pip install
+db = ["schema.sql", "dashboard.html"]

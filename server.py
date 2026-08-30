@@ -16,7 +16,10 @@ from db import init_db
 app = FastAPI(title="TerminalMind")
 _local = threading.local()
 
-HTML_PATH = Path(__file__).parent / "dashboard.html"
+# dashboard.html lives in db/ so it can be declared as package-data in pyproject.toml
+HTML_PATH = Path(__file__).parent / "db" / "dashboard.html"
+if not HTML_PATH.exists():  # fallback for running directly from repo root
+    HTML_PATH = Path(__file__).parent / "dashboard.html"
 
 # Embedding matrix cache — rebuilt after each sync
 _embed_matrix: "np.ndarray | None" = None
