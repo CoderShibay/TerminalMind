@@ -38,10 +38,19 @@ if (-not $PythonCmd) {
     Err "Python 3.10+ required. Download from https://www.python.org/downloads/"
 }
 $parts = $PyVer.Split(".")
-if ([int]$parts[0] -lt 3 -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -lt 10)) {
+$pyMajor = [int]$parts[0]; $pyMinor = [int]$parts[1]
+if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 10)) {
     Err "Python $PyVer found — need 3.10+. Download from https://www.python.org/downloads/"
 }
 Ok "Python $PyVer  ($PythonCmd)"
+
+# Warn if Python is too new for sentence-transformers/torch wheels
+if ($pyMajor -eq 3 -and $pyMinor -ge 13) {
+    Warn "Python $PyVer detected — sentence-transformers/torch may not have wheels for 3.13+ yet."
+    Write-Host "     Semantic search will be disabled if install fails. Keyword search still works."
+    Write-Host "     For full features, install Python 3.10-3.12 from https://www.python.org/downloads/"
+    Write-Host ""
+}
 
 # ── 2. Claude Code check ──────────────────────────────────────────────────────
 $ClaudeDir = $null

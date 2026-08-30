@@ -30,8 +30,11 @@ def run(conn, args: list[str]) -> int:
     disk_transcripts = list(projects_dir.rglob("*.jsonl")) if projects_dir.exists() else []
     disk_sessions  = list(sessions_dir.glob("*.json")) if sessions_dir.exists() else []
 
-    print("  \033[1mON DISK  (~/.claude/)\033[0m")
-    print(f"    {disk_prompts:,} lines in history.jsonl")
+    print(f"  \033[1mON DISK  ({claude_dir}/)\033[0m")
+    if history_file.exists():
+        print(f"    {disk_prompts:,} lines in history.jsonl")
+    else:
+        print(f"    history.jsonl not found — prompt history unavailable (transcripts still index fine)")
     print(f"    {len(disk_transcripts)} transcript files across {len(list(projects_dir.iterdir())) if projects_dir.exists() else 0} project folders")
     print(f"    {len(disk_sessions)} session files")
     print()
@@ -103,6 +106,20 @@ def run(conn, args: list[str]) -> int:
             print(f"  \033[33m→\033[0m {issue.strip()}")
     else:
         print("  \033[32m✓  Everything looks good — all files indexed, all sessions titled\033[0m")
+
+    print()
+
+    # ── Semantic search availability ──────────────────────────────────────────
+    try:
+        import numpy  # noqa: F401
+        import sentence_transformers  # noqa: F401
+        db_embeddings = conn.execute("SELECT COUNT(*) FROM message_embeddings").fetchone()[0]
+        print(f"  \033[32m✓  Semantic search ready — {db_embeddings:,} embeddings in DB\033[0m")
+    except ImportError as e:
+        missing = str(e).split("'")[1] if "'" in str(e) else str(e)
+        print(f"  \033[33m⚠  Semantic search unavailable — {missing} not installed\033[0m")
+        print("     Keyword search still works. To enable semantic search:")
+        print("     pip install sentence-transformers  (requires Python ≤ 3.12)")
 
     print()
 
