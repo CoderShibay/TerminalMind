@@ -80,10 +80,31 @@ WantedBy=default.target
     subprocess.run(["systemctl", "--user", "enable", "--now", "terminalmd"])
 
 
+def install_windows(port: int = 8888) -> None:
+    python = _python()
+    install_dir = _install_dir()
+    task_name = "TerminalMind"
+
+    action  = f'"{python}" "{install_dir}\\main.py" serve {port} --no-browser'
+    result  = subprocess.run(
+        ["schtasks", "/Create", "/F",
+         "/SC", "ONLOGON",
+         "/TN", task_name,
+         "/TR", action],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"schtasks failed: {result.stderr}")
+    # Start it immediately
+    subprocess.run(["schtasks", "/Run", "/TN", task_name], capture_output=True)
+
+
 def uninstall() -> None:
     if platform.system() == "Darwin":
         subprocess.run(["launchctl", "unload", str(PLIST_PATH)], capture_output=True)
         PLIST_PATH.unlink(missing_ok=True)
+    elif platform.system() == "Windows":
+        subprocess.run(["schtasks", "/Delete", "/F", "/TN", "TerminalMind"], capture_output=True)
     else:
         subprocess.run(["systemctl", "--user", "disable", "--now", "terminalmd"], capture_output=True)
         SYSTEMD_PATH.unlink(missing_ok=True)
@@ -99,6 +120,14 @@ def status() -> str:
             capture_output=True, text=True,
         )
         return "running" if r.returncode == 0 else "stopped"
+    elif platform.system() == "Windows":
+        r = subprocess.run(
+            ["schtasks", "/Query", "/TN", "TerminalMind"],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            return "not installed"
+        return "running" if "Running" in r.stdout else "stopped"
     else:
         if not SYSTEMD_PATH.exists():
             return "not installed"
@@ -114,5 +143,7 @@ def install(port: int = 8888) -> None:
         install_macos(port)
     elif platform.system() == "Linux":
         install_linux(port)
+    elif platform.system() == "Windows":
+        install_windows(port)
     else:
         raise NotImplementedError(f"Auto-service not supported on {platform.system()}. Run `tm serve` manually.")
