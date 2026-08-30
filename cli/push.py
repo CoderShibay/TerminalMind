@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from paths import claude_dir
+from paths import claude_dir, load_project_paths, projects_config_path
 
 DOCS_DIR = Path.home() / "Documents"
 PROJECTS_DIR = claude_dir() / "projects"
@@ -392,17 +392,34 @@ def _format_entry(data: dict, session_id: str, title: str) -> str:
 # ── Vault writer ──────────────────────────────────────────────────────────────
 
 def _find_build_log(project_name: str) -> Path | None:
-    """Locate the Build Log.md for a given project name."""
+    """Locate the Build Log.md for a given project name.
+
+    Search order:
+    1. ~/.tm_projects config file (explicit path mapping)
+    2. ~/Documents/PROJECT_NAME/ (default location)
+    3. Case-insensitive scan of ~/Documents/
+    """
+    # 1. Config file
+    project_paths = load_project_paths()
+    mapped = project_paths.get(project_name.lower())
+    if mapped:
+        bl = mapped / "Build Log.md"
+        if bl.exists():
+            return bl
+
+    # 2. Default Documents location
     candidate = DOCS_DIR / project_name / "Build Log.md"
     if candidate.exists():
         return candidate
-    # Case-insensitive search
+
+    # 3. Case-insensitive scan
     if DOCS_DIR.exists():
         for d in DOCS_DIR.iterdir():
             if d.is_dir() and d.name.lower() == project_name.lower():
                 bl = d / "Build Log.md"
                 if bl.exists():
                     return bl
+
     return None
 
 
@@ -455,9 +472,12 @@ def run(conn, args: list[str]) -> int:
     # Find Build Log
     build_log = _find_build_log(project_name)
     if not build_log:
+        config_path = projects_config_path()
         print(f"\n  Build Log.md not found for project: {project_name}")
-        print(f"  Expected: ~/Documents/{project_name}/Build Log.md")
-        print(f"  Run: tm push init {project_name}  to create the vault\n")
+        print(f"  Searched: ~/Documents/{project_name}/Build Log.md")
+        print(f"  If your vault is elsewhere, add it to {config_path}:")
+        print(f"    {project_name} = /path/to/your/{project_name}")
+        print()
         return 1
 
     print(f"\n  Parsing session {session_id[:8]}…")
