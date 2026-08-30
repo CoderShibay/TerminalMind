@@ -22,6 +22,8 @@ Usage:
     tm shell --search QUERY          Full-text search across commands
     tm push SESSION_ID PROJECT         Extract session → append to project Build Log.md
     tm push SESSION_ID PROJECT --dry-run  Preview without writing
+    tm push init PROJECT               Create vault (Home.md + Build Log.md) from template
+    tm push init PROJECT --path PATH   Create vault at a custom path
     tm service install               Auto-start server on login (macOS/Linux)
     tm service uninstall             Remove auto-start
     tm service status                Check if background service is running

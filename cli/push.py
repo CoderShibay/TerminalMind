@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from paths import claude_dir, load_project_paths, projects_config_path
+from cli.templates import HOME_TEMPLATE, BUILD_LOG_TEMPLATE
 
 DOCS_DIR = Path.home() / "Documents"
 PROJECTS_DIR = claude_dir() / "projects"
@@ -439,19 +440,99 @@ def _append_entry(build_log: Path, entry: str) -> None:
     build_log.write_text(new_content, encoding="utf-8")
 
 
+# ── Init vault ────────────────────────────────────────────────────────────────
+
+def _init_vault(project_name: str, vault_path: Path) -> int:
+    """Create Home.md and Build Log.md from built-in templates."""
+    date = datetime.now().strftime("%Y-%m-%d")
+
+    home_path     = vault_path / "Home.md"
+    build_log_path = vault_path / "Build Log.md"
+
+    if home_path.exists() or build_log_path.exists():
+        print(f"\n  Vault already exists at {vault_path}")
+        print("  Delete the existing files first if you want to recreate them.\n")
+        return 1
+
+    vault_path.mkdir(parents=True, exist_ok=True)
+
+    home_path.write_text(
+        HOME_TEMPLATE.format(
+            project_name=project_name,
+            date=date,
+            vault_path=str(vault_path),
+        ),
+        encoding="utf-8",
+    )
+
+    build_log_path.write_text(
+        BUILD_LOG_TEMPLATE.format(
+            project_name=project_name,
+            date=date,
+        ),
+        encoding="utf-8",
+    )
+
+    print()
+    print(f"  \033[32m✓\033[0m  Vault created: {vault_path}")
+    print(f"     Home.md       — fill in your project description and stack")
+    print(f"     Build Log.md  — auto-filled by: tm push SESSION_ID {project_name}")
+    print()
+
+    # If vault is outside ~/Documents, offer to add to ~/.tm_projects
+    if not str(vault_path).startswith(str(DOCS_DIR)):
+        config = projects_config_path()
+        print(f"  \033[33m→\033[0m  Vault is outside ~/Documents — add it to {config}:")
+        print(f"     {project_name} = {vault_path}")
+        print()
+
+    return 0
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def run(conn, args: list[str]) -> int:
     dry_run = "--dry-run" in args
     args = [a for a in args if a != "--dry-run"]
 
-    if len(args) < 2:
+    if len(args) < 1:
         print()
         print("  Usage:")
         print("    tm push SESSION_ID PROJECT_NAME")
         print("    tm push bfada840 ProjectLogger")
         print("    tm push bfada840 SpotTrader --dry-run")
+        print("    tm push init PROJECT_NAME")
+        print("    tm push init PROJECT_NAME --path /custom/path")
         print()
+        return 1
+
+    # ── init subcommand ───────────────────────────────────────────────────────
+    if args[0] == "init":
+        if len(args) < 2:
+            print("\n  Usage: tm push init PROJECT_NAME [--path /custom/path]\n")
+            return 1
+
+        project_name = args[1]
+
+        # Check for --path flag
+        custom_path = None
+        for i, a in enumerate(args):
+            if a == "--path" and i + 1 < len(args):
+                custom_path = Path(args[i + 1]).expanduser()
+                break
+
+        if custom_path:
+            vault_path = custom_path
+        else:
+            # Check ~/.tm_projects first
+            project_paths = load_project_paths()
+            mapped = project_paths.get(project_name.lower())
+            vault_path = mapped if mapped else DOCS_DIR / project_name
+
+        return _init_vault(project_name, vault_path)
+
+    if len(args) < 2:
+        print("\n  Usage: tm push SESSION_ID PROJECT_NAME [--dry-run]\n")
         return 1
 
     partial_id    = args[0]
