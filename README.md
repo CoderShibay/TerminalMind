@@ -105,6 +105,10 @@ tm links                              # show all linked session groups
 tm push SESSION_ID PROJECT_NAME       # extract session → append to project Build Log.md
 tm push bfada840 SpotTrader           # short 8-char session ID works
 tm push bfada840 SpotTrader --dry-run # preview without writing
+tm push init PROJECT_NAME             # create vault from template (Home.md + Build Log.md)
+tm push init PROJECT_NAME --path PATH # create vault at a custom location
+# Add to ~/.tm_projects for vaults outside ~/Documents/:
+#   SpotTrader = /custom/path/SpotTrader
 
 # Shell command history
 tm shell                              # newest 100 commands
