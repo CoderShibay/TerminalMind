@@ -34,20 +34,19 @@ Claude Code already saves every message, tool call, and prompt to disk. Terminal
 
 ## Install
 
+**macOS / Linux**
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/CoderShibay/TerminalMind/main/install.sh)
 ```
 
-Or manually:
+**Windows** (PowerShell — run as normal user, no admin needed)
+```powershell
+iwr https://raw.githubusercontent.com/CoderShibay/TerminalMind/main/install.ps1 -UseBasicParsing | iex
+```
 
+**pip (any platform)**
 ```bash
-git clone https://github.com/CoderShibay/TerminalMind.git ~/terminalmd
-cd ~/terminalmd && python3 -m venv .venv && source .venv/bin/activate && pip install -e .
-sudo tee /usr/local/bin/tm > /dev/null <<'EOF'
-#!/bin/bash
-exec ~/terminalmd/.venv/bin/python3 ~/terminalmd/main.py "$@"
-EOF
-sudo chmod +x /usr/local/bin/tm && tm sync
+pip install terminalmd
 ```
 
 ---
