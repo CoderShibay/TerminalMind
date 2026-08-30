@@ -6,8 +6,8 @@ pulls what it needs on demand with:
     tm context --session ID "specific question"
 """
 import re
-import subprocess
 from datetime import datetime, timedelta
+from cli.clipboard import copy as _copy_to_clipboard
 
 
 def _ts(ts) -> str:
@@ -158,10 +158,7 @@ def run(conn, args: list[str]) -> int:
 
     # ── Copy to clipboard ─────────────────────────────────────────────────────
     output = "\n".join(output_lines)
-    try:
-        subprocess.run(["pbcopy"], input=output.encode(), check=True)
+    if _copy_to_clipboard(output):
         print("  ✓ Copied — paste into new Claude session as the only starter context\n")
-    except Exception:
-        pass
 
     return 0

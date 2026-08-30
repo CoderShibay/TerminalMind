@@ -2,6 +2,7 @@
 import re
 import sys
 from datetime import datetime
+from cli.clipboard import copy as _copy_to_clipboard
 
 
 def _ts(ts: str | None) -> str:
@@ -149,11 +150,8 @@ def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) ->
     output = "\n".join(output_lines)
     print("\n" + output + "\n")
 
-    try:
-        subprocess.run(["pbcopy"], input=output.encode(), check=True)
+    if _copy_to_clipboard(output):
         print("  ✓ Copied to clipboard — paste into new Claude session\n")
-    except Exception:
-        pass
 
     return 0
 
@@ -380,11 +378,7 @@ def run(conn, args: list[str]) -> int:
     output = "\n".join(lines)
     print("\n" + output + "\n")
 
-    try:
-        import subprocess
-        subprocess.run(["pbcopy"], input=output.encode(), check=True)
-        print(f"  ✓ Copied to clipboard — paste into Claude\n")
-    except Exception:
-        pass
+    if _copy_to_clipboard(output):
+        print("  ✓ Copied to clipboard — paste into Claude\n")
 
     return 0

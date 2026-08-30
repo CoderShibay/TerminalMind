@@ -4,6 +4,7 @@ import re
 import subprocess
 import time
 from datetime import datetime, date, timedelta
+from cli.clipboard import copy as _copy_to_clipboard
 
 OLLAMA_MODEL = "llama3.2"
 
@@ -373,8 +374,8 @@ def run(conn, args: list[str]) -> int:
     # Copy clean version to clipboard
     clean_output = "\n".join(output_lines)
     try:
-        subprocess.run(["pbcopy"], input=clean_output.encode(), check=True)
-        print("\n  ✓ Copied to clipboard\n")
+        if _copy_to_clipboard(clean_output):
+            print("\n  ✓ Copied to clipboard\n")
     except Exception:
         pass
 
