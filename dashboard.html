@@ -57,6 +57,10 @@
     <button onclick="setTab('browse')" id="tab-browse" class="tab-btn on">Browse</button>
     <button onclick="setTab('search')" id="tab-search" class="tab-btn">Search</button>
     <button onclick="setTab('shell')"  id="tab-shell"  class="tab-btn">Shell</button>
+    <button onclick="setTab('board')"  id="tab-board"  class="tab-btn">Board</button>
+    <button onclick="setTab('tools')"  id="tab-tools"  class="tab-btn">Tools</button>
+    <button onclick="setTab('files')"  id="tab-files"  class="tab-btn">Files</button>
+    <button onclick="setTab('errors')" id="tab-errors" class="tab-btn">Errors</button>
   </div>
   <div class="flex items-center gap-2 ml-auto flex-wrap">
     <div id="tag-bar" class="flex gap-1.5 flex-wrap items-center">
@@ -244,6 +248,183 @@
   <div id="search-results" class="space-y-3"></div>
 </div>
 
+<!-- Errors Tab -->
+<div id="pane-errors" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="er-total">—</div>
+      <div class="text-[12px] text-[#94a3b8]">error patterns</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-[#f87171]" id="er-recurring">—</div>
+      <div class="text-[12px] text-[#94a3b8]">recurring (2+ sessions)</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="er-hits">—</div>
+      <div class="text-[12px] text-[#94a3b8]">total error hits</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-3 mb-5 flex-wrap">
+    <div class="flex gap-0.5">
+      <button onclick="loadErrors('')"    id="erf-all"  class="tab-btn on text-[12px] py-1 px-3">All time</button>
+      <button onclick="loadErrors('30d')" id="erf-30d"  class="tab-btn text-[12px] py-1 px-3">30 days</button>
+      <button onclick="loadErrors('7d')"  id="erf-7d"   class="tab-btn text-[12px] py-1 px-3">7 days</button>
+      <button onclick="loadErrors('1d')"  id="erf-1d"   class="tab-btn text-[12px] py-1 px-3">Today</button>
+    </div>
+    <select id="er-agent" onchange="loadErrors(erSince)"
+      class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-[#94a3b8] text-sm">
+      <option value="">All agents</option><option value="claude">Claude</option>
+      <option value="codex">Codex</option><option value="agy">AGY</option>
+    </select>
+    <select id="er-project" onchange="loadErrors(erSince)"
+      class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-[#94a3b8] text-sm">
+      <option value="">All projects</option>
+    </select>
+    <label class="flex items-center gap-2 text-[13px] text-[#94a3b8] cursor-pointer select-none">
+      <input type="checkbox" id="er-recurring-only" onchange="renderErrors()"
+        class="accent-[#4f46e5] w-3.5 h-3.5">
+      Recurring only
+    </label>
+    <input id="er-search" type="text" placeholder="Filter errors…"
+      class="flex-1 min-w-[160px] bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-white text-[13px]"
+      oninput="renderErrors()">
+  </div>
+
+  <!-- Error list -->
+  <div id="er-list" class="space-y-2"></div>
+</div>
+
+<!-- Files Tab -->
+<div id="pane-files" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="fl-total">—</div>
+      <div class="text-[12px] text-[#94a3b8]">unique files</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="fl-touches">—</div>
+      <div class="text-[12px] text-[#94a3b8]">total touches</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3 min-w-0">
+      <div class="text-[13px] font-bold text-white truncate" id="fl-top">—</div>
+      <div class="text-[12px] text-[#94a3b8] shrink-0">hottest file</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-3 mb-5 flex-wrap">
+    <div class="flex gap-0.5">
+      <button onclick="loadFiles('')"    id="flf-all"  class="tab-btn on text-[12px] py-1 px-3">All time</button>
+      <button onclick="loadFiles('30d')" id="flf-30d"  class="tab-btn text-[12px] py-1 px-3">30 days</button>
+      <button onclick="loadFiles('7d')"  id="flf-7d"   class="tab-btn text-[12px] py-1 px-3">7 days</button>
+      <button onclick="loadFiles('1d')"  id="flf-1d"   class="tab-btn text-[12px] py-1 px-3">Today</button>
+    </div>
+    <select id="fl-agent" onchange="loadFiles(flSince)"
+      class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-[#94a3b8] text-sm">
+      <option value="">All agents</option><option value="claude">Claude</option>
+      <option value="codex">Codex</option><option value="agy">AGY</option>
+    </select>
+    <select id="fl-project" onchange="loadFiles(flSince)"
+      class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-[#94a3b8] text-sm">
+      <option value="">All projects</option>
+    </select>
+    <input id="fl-search" type="text" placeholder="Filter files…"
+      class="flex-1 min-w-[160px] bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-white text-[13px]"
+      oninput="renderFiles()">
+  </div>
+
+  <!-- File list -->
+  <div id="fl-list" class="space-y-1.5"></div>
+</div>
+
+<!-- Tools Tab -->
+<div id="pane-tools" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="tl-total">—</div>
+      <div class="text-[12px] text-[#94a3b8]">total calls</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3">
+      <div class="text-2xl font-bold text-white" id="tl-unique">—</div>
+      <div class="text-[12px] text-[#94a3b8]">unique tools</div>
+    </div>
+    <div class="card px-4 py-3 flex items-center gap-3 min-w-0">
+      <div class="text-[15px] font-bold text-white truncate" id="tl-top">—</div>
+      <div class="text-[12px] text-[#94a3b8] shrink-0">most used</div>
+    </div>
+  </div>
+
+  <!-- Filters row -->
+  <div class="flex items-center gap-3 mb-5 flex-wrap">
+    <div class="flex gap-0.5">
+      <button onclick="loadTools('')"    id="tlf-all"  class="tab-btn on text-[12px] py-1 px-3">All time</button>
+      <button onclick="loadTools('30d')" id="tlf-30d"  class="tab-btn text-[12px] py-1 px-3">30 days</button>
+      <button onclick="loadTools('7d')"  id="tlf-7d"   class="tab-btn text-[12px] py-1 px-3">7 days</button>
+      <button onclick="loadTools('1d')"  id="tlf-1d"   class="tab-btn text-[12px] py-1 px-3">Today</button>
+    </div>
+    <select id="tl-agent" onchange="loadTools(tlSince)"
+      class="bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-[#94a3b8] text-sm">
+      <option value="">All agents</option><option value="claude">Claude</option>
+      <option value="codex">Codex</option><option value="agy">AGY</option>
+    </select>
+    <input id="tl-search" type="text" placeholder="Filter tools…"
+      class="flex-1 min-w-[160px] bg-[#0d0d12] border border-[#23233a] rounded-lg px-3 py-1.5 text-white text-[13px]"
+      oninput="renderTools()">
+    <div class="flex gap-0.5">
+      <button onclick="setTlGroup('all')"  id="tlg-all"  class="tab-btn on text-[12px] py-1 px-3">All</button>
+      <button onclick="setTlGroup('core')" id="tlg-core" class="tab-btn text-[12px] py-1 px-3">Core</button>
+      <button onclick="setTlGroup('mcp')"  id="tlg-mcp"  class="tab-btn text-[12px] py-1 px-3">MCP</button>
+      <button onclick="setTlGroup('agent')"id="tlg-agent"class="tab-btn text-[12px] py-1 px-3">Agent</button>
+    </div>
+  </div>
+
+  <!-- Tool list -->
+  <div id="tl-list" class="space-y-1.5"></div>
+</div>
+
+<!-- Board Tab -->
+<div id="pane-board" class="px-6 py-5 max-w-4xl mx-auto hidden">
+
+  <!-- Sub-tab bar -->
+  <div class="flex gap-0.5 mb-5">
+    <button onclick="setBoardSub('tasks')"    id="bsub-tasks"    class="tab-btn on">Tasks</button>
+    <button onclick="setBoardSub('activity')" id="bsub-activity" class="tab-btn">Activity</button>
+    <button onclick="setBoardSub('knowledge')"id="bsub-knowledge"class="tab-btn">Knowledge</button>
+  </div>
+
+  <!-- Tasks sub-pane -->
+  <div id="bpane-tasks">
+    <!-- Status filter -->
+    <div class="flex gap-1.5 mb-4 flex-wrap">
+      <button onclick="loadBoardTasks('')"          id="bst-all"       class="tag active cursor-pointer">All</button>
+      <button onclick="loadBoardTasks('pending')"   id="bst-pending"   class="tag cursor-pointer">Pending</button>
+      <button onclick="loadBoardTasks('claimed')"   id="bst-claimed"   class="tag cursor-pointer">Claimed</button>
+      <button onclick="loadBoardTasks('completed')" id="bst-completed" class="tag cursor-pointer">Completed</button>
+    </div>
+    <div id="board-tasks-status" class="text-[13px] text-[#94a3b8] mb-3 min-h-[18px]"></div>
+    <div id="board-tasks-list"   class="space-y-2"></div>
+  </div>
+
+  <!-- Activity sub-pane -->
+  <div id="bpane-activity" class="hidden">
+    <div id="board-activity-list" class="space-y-1.5"></div>
+  </div>
+
+  <!-- Knowledge sub-pane -->
+  <div id="bpane-knowledge" class="hidden">
+    <div id="board-knowledge-list" class="space-y-3"></div>
+  </div>
+
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let allSessions=[], activeTag=null, activeDayFilter=null, expandedSession=null;
@@ -287,12 +468,16 @@ function highlight(text,query){
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 function setTab(name,push=true){
-  ['browse','search','shell'].forEach(t=>{
+  ['browse','search','shell','board','tools','files','errors'].forEach(t=>{
     document.getElementById('pane-'+t).classList.toggle('hidden',t!==name);
     document.getElementById('tab-'+t).classList.toggle('on',t===name);
   });
   if(name==='search')setTimeout(()=>document.getElementById('q').focus(),50);
   if(name==='shell')loadShell();
+  if(name==='board')loadBoard();
+  if(name==='tools'&&!tlLoaded)loadTools('');
+  if(name==='files'&&!flLoaded)loadFiles('');
+  if(name==='errors'&&!erLoaded)loadErrors('');
   if(push)history.pushState({tab:name,tag:activeTag},'','#'+name);
 }
 
@@ -417,7 +602,7 @@ function goHome(){
 }
 window.addEventListener('popstate',e=>{
   const s=e.state||{tab:'browse',tag:null};
-  if(s.tag!==activeTag){activeTag=s.tag;document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);renderSessions();}
+  if(s.tab!=='board'&&s.tag!==activeTag){activeTag=s.tag;document.querySelectorAll('.tag').forEach(el=>el.classList.remove('active'));if(activeTag)document.getElementById('tag-'+activeTag)?.classList.add('active');document.getElementById('clear-filter-btn').classList.toggle('hidden',!activeTag);renderSessions();}
   setTab(s.tab||'browse',false);
 });
 
@@ -609,6 +794,8 @@ function renderSessions(){
 
 function renderCard(s,isPinnedSection=false){
   const sid=s.session_id;
+  const nativeSid=s.native_session_id||sid;
+  const agent=(s.agent||'claude').toUpperCase();
   const title=s.title||'Untitled session';
   const tags=(s.project_tags||'').split(',').filter(Boolean);
   const dot=s.status==='active'?'bg-green-500':s.status==='busy'?'bg-yellow-500':'bg-[#334155]';
@@ -618,6 +805,7 @@ function renderCard(s,isPinnedSection=false){
   const tagHtml=tags.map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
   const methodBadge=s.method==='ollama'?'<span class="text-[10px] text-[#94a3b8] ml-1">✦</span>':'';
   const isLinked=linkedSessionIds.has(sid);
+  const agentBadge=`<span class="text-[10px] font-semibold text-[#cbd5e1] border border-[#334155] rounded px-1.5 py-0.5">${agent}</span>`;
 
   return `<div class="scard px-4 py-3 fade-in" id="card-${sid}" data-sid="${sid}" onclick="toggleCard('${sid}')">
     <div class="flex items-start gap-3">
@@ -625,7 +813,7 @@ function renderCard(s,isPinnedSection=false){
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 justify-between">
           <span class="flex items-center gap-1 min-w-0" id="title-wrap-${sid}">
-            <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${esc(title)}${methodBadge}${historyOnly?' <span class="text-[10px] text-[#94a3b8] border border-[#2d2d4d] rounded px-1.5 py-0.5 ml-1">prompts only</span>':''}</span>
+            <span class="text-white text-[14px] font-medium leading-snug truncate" id="title-text-${sid}">${agentBadge} ${esc(title)}${methodBadge}${historyOnly?' <span class="text-[10px] text-[#94a3b8] border border-[#2d2d4d] rounded px-1.5 py-0.5 ml-1">prompts only</span>':''}</span>
             <button class="rename-btn" onclick="event.stopPropagation();startRename('${sid}','${esc(title).replace(/'/g,"\\'")}')" title="Rename">✎</button>
           </span>
           <div class="flex items-center gap-2 shrink-0 ml-2">
@@ -637,7 +825,7 @@ function renderCard(s,isPinnedSection=false){
         <div class="flex items-center gap-2 text-[12px] text-[#94a3b8] mt-0.5">
           <span>${relTime(s.started_at)}</span><span>·</span>
           <span>${s.msg_count||0} msgs</span><span>·</span>
-          <span class="font-mono text-[11px] text-[#4f46e5] cursor-pointer hover:text-[#818cf8]" title="Click to copy — use with: tm context --session ${sid.slice(0,8)}" onclick="event.stopPropagation();navigator.clipboard.writeText('${sid.slice(0,8)}');this.textContent='✓';setTimeout(()=>this.textContent='${sid.slice(0,8)}',1200)">${sid.slice(0,8)}</span>
+          <span class="font-mono text-[11px] text-[#4f46e5] cursor-pointer hover:text-[#818cf8]" title="Click to copy — use with: tm context --session ${nativeSid.slice(0,8)}" onclick="event.stopPropagation();navigator.clipboard.writeText('${nativeSid.slice(0,8)}');this.textContent='✓';setTimeout(()=>this.textContent='${nativeSid.slice(0,8)}',1200)">${nativeSid.slice(0,8)}</span>
         </div>
         ${tagHtml?`<div class="flex gap-1.5 mt-1.5 flex-wrap">${tagHtml}</div>`:''}
       </div>
@@ -940,7 +1128,7 @@ async function doSearch(){
     const first=data.msgs[0];
 
     const msgHtml=data.msgs.slice(0,6).map(m=>{
-      const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':'ASST',col=isU?'text-[#818cf8]':'text-[#4ade80]';
+      const isU=m.role==='user',cls=isU?'msg-user':'msg-asst',lbl=isU?'YOU':(m.agent||session?.agent||'AI').toUpperCase(),col=isU?'text-[#818cf8]':'text-[#4ade80]';
       const txt=(m.text||m.content_text||'').slice(0,380);
       // Show similarity bar for semantic results
       const semBar=m.source==='semantic'&&m.score
@@ -1029,6 +1217,446 @@ document.addEventListener('keydown',e=>{
     if(sid)exportSession(sid);
   }
 });
+
+// ── Errors tab ────────────────────────────────────────────────────────────
+let erData = [];
+let erSince = '';
+let erLoaded = false;
+
+function erSeverity(sessions){
+  if(sessions >= 5) return {ring:'border-[#ef4444]', badge:'bg-[#3a1010] text-[#f87171] border-[#7f1d1d]', dot:'bg-[#ef4444]'};
+  if(sessions >= 3) return {ring:'border-[#f97316]', badge:'bg-[#2a1500] text-[#fb923c] border-[#7c2d12]', dot:'bg-[#f97316]'};
+  if(sessions >= 2) return {ring:'border-[#eab308]', badge:'bg-[#2a2000] text-[#facc15] border-[#713f12]', dot:'bg-[#eab308]'};
+  return {ring:'border-[#23233a]', badge:'bg-[#1e1e35] text-[#818cf8] border-[#3730a3]', dot:'bg-[#4f46e5]'};
+}
+
+async function loadErrors(since){
+  erSince = since;
+  ['all','30d','7d','1d'].forEach(k=>{
+    document.getElementById('erf-'+k)?.classList.toggle('on',(since||'all')===k||(!since&&k==='all'));
+  });
+  const project = document.getElementById('er-project')?.value||'';
+  const agent   = document.getElementById('er-agent')?.value||'';
+  const params  = new URLSearchParams({limit:200});
+  if(since)   params.set('since', since);
+  if(project) params.set('project', project);
+  if(agent)   params.set('agent', agent);
+
+  const data = await api('/api/errors?'+params);
+  erData = data.errors||[];
+  erLoaded = true;
+
+  const recurring = erData.filter(e=>e.sessions>1).length;
+  const hits      = erData.reduce((s,e)=>s+e.count, 0);
+  document.getElementById('er-total').textContent     = fmt(data.total);
+  document.getElementById('er-recurring').textContent = fmt(recurring);
+  document.getElementById('er-hits').textContent      = fmt(hits);
+
+  const sel = document.getElementById('er-project');
+  if(sel && sel.options.length<=1 && data.projects?.length){
+    data.projects.forEach(p=>{
+      const o=document.createElement('option');
+      o.value=p; o.textContent=p; sel.appendChild(o);
+    });
+  }
+  renderErrors();
+}
+
+function renderErrors(){
+  const q          = (document.getElementById('er-search')?.value||'').toLowerCase();
+  const recurOnly  = document.getElementById('er-recurring-only')?.checked;
+  let rows = erData;
+  if(recurOnly) rows = rows.filter(e=>e.sessions>1);
+  if(q) rows = rows.filter(e=>(e.signature||'').toLowerCase().includes(q)
+    || (e.projects||[]).join(',').toLowerCase().includes(q));
+
+  const listEl = document.getElementById('er-list');
+  if(!rows.length){
+    listEl.innerHTML='<div class="text-[#64748b] text-sm py-8 text-center">No error patterns match.</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map((e,i)=>{
+    const sev    = erSeverity(e.sessions);
+    const last   = e.last_seen ? relTime(e.last_seen) : '?';
+    const projs  = (e.projects||[]).map(p=>`<span class="tag text-[10px]">${esc(p)}</span>`).join('');
+    const agents = agentBadgesHtml(e.agents);
+    const recurBadge = e.sessions>1
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded border ${sev.badge} font-semibold">★ ${e.sessions} sessions</span>`
+      : `<span class="text-[10px] text-[#64748b]">1 session</span>`;
+    // Clean up the signature for display
+    const sig = (e.signature||'').replace(/^<tool_use_error>/,'');
+    const exampleId = 'ex-'+i;
+
+    return `<div class="card px-4 py-3 fade-in border ${sev.ring} transition-colors">
+      <div class="flex items-start gap-3">
+        <div class="w-2 h-2 rounded-full mt-1.5 shrink-0 ${sev.dot}"></div>
+        <div class="flex-1 min-w-0">
+          <!-- header row -->
+          <div class="flex items-center gap-2 flex-wrap mb-1.5">
+            ${recurBadge}
+            <span class="text-[#94a3b8] text-[11px]">x${e.count} hits</span>
+            <span class="text-[#64748b] text-[11px]">·</span>
+            <span class="text-[#64748b] text-[11px]">last ${last}</span>
+            ${projs}
+            ${agents}
+          </div>
+          <!-- signature -->
+          <div class="text-[#e2e8f0] text-[13px] font-mono leading-snug break-words">${esc(sig)}</div>
+          <!-- expandable example -->
+          ${e.example ? `
+          <button onclick="toggleExample('${exampleId}')"
+            class="text-[11px] text-[#4f46e5] hover:text-[#818cf8] mt-1.5">show example ▾</button>
+          <pre id="${exampleId}" class="hidden mt-2 text-[11px] text-[#94a3b8] bg-[#0d0d12] border border-[#1e1e30] rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap max-h-[140px] overflow-y-auto">${esc((e.example||'').slice(0,400))}</pre>
+          ` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleExample(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const hidden = el.classList.toggle('hidden');
+  const btn = el.previousElementSibling;
+  if(btn) btn.textContent = hidden ? 'show example ▾' : 'hide example ▴';
+}
+
+// ── Files tab ─────────────────────────────────────────────────────────────
+let flData = [];
+let flSince = '';
+let flLoaded = false;
+
+const TOOL_BADGE = {
+  Read:  {bg:'bg-[#1e1e35]', text:'text-[#818cf8]', border:'border-[#3730a3]'},
+  Edit:  {bg:'bg-[#1a2a1a]', text:'text-[#4ade80]', border:'border-[#166534]'},
+  Write: {bg:'bg-[#2a1a00]', text:'text-[#f59e0b]', border:'border-[#78350f]'},
+  Bash:  {bg:'bg-[#1a1a2a]', text:'text-[#94a3b8]', border:'border-[#374151]'},
+};
+
+function toolBadgeHtml(toolsStr){
+  return (toolsStr||'').split(',').map(t=>{
+    t = t.trim();
+    const c = TOOL_BADGE[t] || {bg:'bg-[#1a1a1a]',text:'text-[#94a3b8]',border:'border-[#374151]'};
+    return `<span class="text-[10px] px-1.5 py-0.5 rounded border ${c.bg} ${c.text} ${c.border}">${esc(t)}</span>`;
+  }).join('');
+}
+
+async function loadFiles(since){
+  flSince = since;
+  ['all','30d','7d','1d'].forEach(k=>{
+    document.getElementById('flf-'+k)?.classList.toggle('on',(since||'all')===k||(!since&&k==='all'));
+  });
+  const project = document.getElementById('fl-project')?.value || '';
+  const agent   = document.getElementById('fl-agent')?.value || '';
+  const params  = new URLSearchParams({limit:200});
+  if(since)   params.set('since', since);
+  if(project) params.set('project', project);
+  if(agent)   params.set('agent', agent);
+
+  const data = await api('/api/files?' + params);
+  flData = data.files || [];
+  flLoaded = true;
+
+  document.getElementById('fl-total').textContent   = fmt(data.total_files);
+  document.getElementById('fl-touches').textContent  = fmt(flData.reduce((s,f)=>s+f.touches,0));
+  const top = flData.find(f => f.file_path && !f.file_path.startsWith('~'));
+  document.getElementById('fl-top').textContent = top ? top.file_path.split('/').pop() : '—';
+
+  // Populate project dropdown (first load only)
+  const sel = document.getElementById('fl-project');
+  if(sel && sel.options.length <= 1 && data.projects?.length){
+    data.projects.forEach(p=>{
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      sel.appendChild(o);
+    });
+  }
+  renderFiles();
+}
+
+function renderFiles(){
+  const q = (document.getElementById('fl-search')?.value||'').toLowerCase();
+  let rows = flData;
+  if(q) rows = rows.filter(f=>(f.file_path||'').toLowerCase().includes(q));
+
+  const listEl = document.getElementById('fl-list');
+  if(!rows.length){
+    listEl.innerHTML='<div class="text-[#64748b] text-sm py-8 text-center">No files match.</div>';
+    return;
+  }
+
+  const maxT = rows[0]?.touches || 1;
+  listEl.innerHTML = rows.map(f=>{
+    const pct   = Math.max(3, Math.round(f.touches / maxT * 100));
+    const parts = (f.file_path||'').split('/');
+    const name  = parts.pop() || f.file_path;
+    const dir   = parts.join('/') || '';
+    const last  = f.last_touch  ? relTime(f.last_touch)  : '?';
+    const sess  = f.sessions > 1 ? `<span class="text-[#64748b] text-[11px]">${f.sessions} sessions</span>` : '';
+
+    return `<div class="card px-4 py-2.5 fade-in hover:border-[#2d2d4d] transition-colors">
+      <div class="flex items-center gap-3">
+        <!-- bar -->
+        <div class="w-20 shrink-0 h-1.5 bg-[#1e1e30] rounded-full overflow-hidden">
+          <div class="h-full rounded-full" style="width:${pct}%;background:#4f46e5"></div>
+        </div>
+        <!-- count -->
+        <div class="text-white font-bold text-[14px] w-10 shrink-0 text-right">${fmt(f.touches)}</div>
+        <!-- tool badges -->
+        <div class="flex gap-1 shrink-0">${toolBadgeHtml(f.tools)}</div>
+        <div class="flex gap-1 shrink-0">${agentBadgesHtml(f.agents)}</div>
+        <!-- name + path -->
+        <div class="flex-1 min-w-0">
+          <div class="text-[#e2e8f0] text-[13px] font-medium truncate">${esc(name)}</div>
+          <div class="text-[#4f46e5] text-[10px] font-mono truncate">${esc(dir)}</div>
+        </div>
+        <!-- meta -->
+        <div class="text-[11px] text-[#64748b] shrink-0 text-right leading-tight">
+          <div>${last}</div>
+          ${sess}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Tools tab ─────────────────────────────────────────────────────────────
+let tlData = [];        // full tool list from last fetch
+let tlSince = '';       // active time filter
+let tlGroup = 'all';    // active category filter
+let tlLoaded = false;
+
+const CORE_TOOLS  = new Set(['Bash','Edit','Read','Write','MultiEdit','NotebookEdit','Grep','Glob',
+  'exec','exec_command','write_stdin','apply_patch','run_command','view_file','write_to_file',
+  'replace_file_content','grep_search','list_dir','list_directory','find_by_name']);
+const AGENT_TOOLS = new Set(['WebSearch','WebFetch','Skill','Agent','ToolSearch','AskUserQuestion',
+                              'PushNotification','Monitor','RemoteTrigger','TaskCreate','TaskGet',
+                              'TaskList','TaskUpdate','TaskStop','TaskOutput','web_search','search_web',
+                              'tool_search','spawn_agent','send_message','list_agents','wait_agent']);
+
+function toolCategory(name){
+  if(CORE_TOOLS.has(name))  return 'core';
+  if(AGENT_TOOLS.has(name)) return 'agent';
+  if(name.startsWith('mcp__')) return 'mcp';
+  return 'other';
+}
+const CAT_LABEL = {core:'Core', mcp:'MCP', agent:'Agent', other:'Other'};
+const CAT_COLOR = {
+  core: 'bg-[#1e1e35] text-[#818cf8] border-[#3730a3]',
+  mcp:  'bg-[#0f2a1a] text-[#4ade80] border-[#166534]',
+  agent:'bg-[#2a1a00] text-[#f59e0b] border-[#78350f]',
+  other:'bg-[#1a1a1a] text-[#94a3b8] border-[#374151]',
+};
+
+async function loadTools(since){
+  tlSince = since;
+  ['all','30d','7d','1d'].forEach(k=>{
+    document.getElementById('tlf-'+k)?.classList.toggle('on', (since||'all')===k||(!since&&k==='all'));
+  });
+  const params = new URLSearchParams();
+  const agent = document.getElementById('tl-agent')?.value||'';
+  if(since) params.set('since', since);
+  if(agent) params.set('agent', agent);
+  const data = await api('/api/tools'+(params.size?'?'+params:''));
+  tlData = data.tools || [];
+  document.getElementById('tl-total').textContent  = fmt(data.total_calls);
+  document.getElementById('tl-unique').textContent = fmt(data.unique_tools);
+  document.getElementById('tl-top').textContent    = tlData[0]?.tool_name || '—';
+  tlLoaded = true;
+  renderTools();
+}
+
+function setTlGroup(g){
+  tlGroup = g;
+  ['all','core','mcp','agent'].forEach(k=>{
+    document.getElementById('tlg-'+k)?.classList.toggle('on', k===g);
+  });
+  renderTools();
+}
+
+function renderTools(){
+  const q = (document.getElementById('tl-search')?.value||'').toLowerCase();
+  let rows = tlData;
+  if(tlGroup !== 'all') rows = rows.filter(t => toolCategory(t.tool_name) === tlGroup);
+  if(q) rows = rows.filter(t => t.tool_name.toLowerCase().includes(q));
+
+  const listEl = document.getElementById('tl-list');
+  if(!rows.length){
+    listEl.innerHTML = '<div class="text-[#64748b] text-sm py-8 text-center">No tools match.</div>';
+    return;
+  }
+
+  const maxCnt = rows[0]?.cnt || 1;
+  listEl.innerHTML = rows.map(t=>{
+    const cat   = toolCategory(t.tool_name);
+    const cc    = CAT_COLOR[cat];
+    const pct   = Math.max(3, Math.round(t.cnt / maxCnt * 100));
+    const last  = t.last_used  ? relTime(t.last_used)  : '?';
+    const first = t.first_used ? relTime(t.first_used) : '?';
+    // Shorten mcp__ names for display
+    const display = t.tool_name.startsWith('mcp__')
+      ? t.tool_name.replace(/^mcp__[^_]+__/, '').replace(/_/g,'-')
+      : t.tool_name;
+    const fullName = t.tool_name !== display
+      ? `<span class="text-[#64748b] text-[10px] font-mono truncate max-w-[180px]">${esc(t.tool_name)}</span>`
+      : '';
+
+    return `<div class="card px-4 py-2.5 fade-in hover:border-[#2d2d4d] transition-colors">
+      <div class="flex items-center gap-3">
+        <!-- bar -->
+        <div class="w-24 shrink-0 h-1.5 bg-[#1e1e30] rounded-full overflow-hidden">
+          <div class="h-full rounded-full" style="width:${pct}%;background:#4f46e5"></div>
+        </div>
+        <!-- count -->
+        <div class="text-white font-bold text-[14px] w-12 shrink-0 text-right">${fmt(t.cnt)}</div>
+        <!-- category badge -->
+        <span class="text-[10px] px-1.5 py-0.5 rounded border ${cc} shrink-0">${CAT_LABEL[cat]}</span>
+        <div class="flex gap-1 shrink-0">${agentBadgesHtml(t.agents)}</div>
+        <!-- name -->
+        <div class="flex-1 min-w-0">
+          <div class="text-[#e2e8f0] text-[13px] font-medium truncate">${esc(display)}</div>
+          ${fullName}
+        </div>
+        <!-- times -->
+        <div class="text-[11px] text-[#64748b] shrink-0 text-right leading-tight">
+          <div>last ${last}</div>
+          <div class="text-[10px]">first ${first}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Board tab ──────────────────────────────────────────────────────────────
+let boardSubLoaded = {tasks:false, activity:false, knowledge:false};
+let activeBoardSub = 'tasks';
+let activeBoardStatus = '';
+
+function setBoardSub(name){
+  activeBoardSub = name;
+  ['tasks','activity','knowledge'].forEach(s=>{
+    document.getElementById('bpane-'+s).classList.toggle('hidden', s!==name);
+    document.getElementById('bsub-'+s).classList.toggle('on', s===name);
+  });
+  if(!boardSubLoaded[name]){
+    if(name==='tasks')    loadBoardTasks('');
+    if(name==='activity') loadBoardActivity();
+    if(name==='knowledge')loadBoardKnowledge();
+  }
+}
+
+function loadBoard(){
+  if(!boardSubLoaded[activeBoardSub]) setBoardSub(activeBoardSub);
+}
+
+const STATUS_COLOR = {
+  pending:'text-[#f59e0b]', claimed:'text-[#818cf8]',
+  completed:'text-[#4ade80]', abandoned:'text-[#ef4444]'
+};
+const AGENT_COLOR  = {claude:'text-[#4f46e5]', codex:'text-[#22c55e]', agy:'text-[#f59e0b]'};
+
+function agentBadgesHtml(agents){
+  return (agents||[]).map(agent=>
+    `<span class="tag text-[9px] uppercase ${AGENT_COLOR[agent]||'text-[#94a3b8]'}">${esc(agent)}</span>`
+  ).join('');
+}
+
+async function loadBoardTasks(status){
+  activeBoardStatus = status;
+  // update filter chips
+  ['all','pending','claimed','completed'].forEach(s=>{
+    const el = document.getElementById('bst-'+s);
+    if(!el) return;
+    const match = s==='all' ? status==='' : s===status;
+    el.classList.toggle('active', match);
+  });
+
+  const params = new URLSearchParams({limit:150});
+  if(status) params.set('status', status);
+  const tasks = await api('/api/board/tasks?'+params);
+  boardSubLoaded.tasks = true;
+
+  const listEl   = document.getElementById('board-tasks-list');
+  const statusEl = document.getElementById('board-tasks-status');
+  statusEl.textContent = tasks.length + ' task(s)' + (status ? ' — '+status : '');
+
+  if(!tasks.length){ listEl.innerHTML='<div class="text-[#64748b] text-sm py-6 text-center">No tasks.</div>'; return; }
+
+  listEl.innerHTML = tasks.map(t=>{
+    const sc  = STATUS_COLOR[t.status]||'text-[#94a3b8]';
+    const ac  = AGENT_COLOR[t.posted_by]||'text-[#94a3b8]';
+    const ts  = t.timestamp ? relTime(t.timestamp) : '';
+    const proj= t.project ? `<span class="tag text-[10px]">${esc(t.project)}</span>` : '';
+    const needsBadge = t.needs ? `<span class="tag text-[10px]">${esc(t.needs)}</span>` : '';
+    const result = t.result ? `
+      <div class="mt-2 text-[11px] text-[#94a3b8] bg-[#0d0d12] rounded px-3 py-2 border border-[#1e1e30] max-h-[80px] overflow-y-auto leading-relaxed">
+        ${esc((t.result||'').slice(0,300))}${(t.result||'').length>300?'…':''}
+      </div>` : '';
+    return `<div class="card px-4 py-3 fade-in">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="text-white text-[13px] font-medium leading-snug mb-1">${esc(t.title||'Untitled')}</div>
+          <div class="flex items-center gap-2 flex-wrap text-[11px]">
+            <span class="${sc} font-semibold uppercase">${esc(t.status||'?')}</span>
+            <span class="text-[#64748b]">·</span>
+            <span class="${ac}">${esc(t.posted_by||'?')}</span>
+            ${t.claimed_by&&t.claimed_by!==t.posted_by?`<span class="text-[#64748b]">→</span><span class="${AGENT_COLOR[t.claimed_by]||'text-[#94a3b8]'}">${esc(t.claimed_by)}</span>`:''}
+            <span class="text-[#64748b]">·</span>
+            <span class="text-[#64748b]">${ts}</span>
+            ${proj}${needsBadge}
+            <span class="font-mono text-[#4f46e5] text-[10px]">${esc(t.id||'')}</span>
+          </div>
+          ${result}
+        </div>
+        ${t.promoted?'<span class="text-[#f59e0b] text-[11px] shrink-0" title="Promoted to knowledge">★</span>':''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadBoardActivity(){
+  const rows = await api('/api/board/activity');
+  boardSubLoaded.activity = true;
+  const listEl = document.getElementById('board-activity-list');
+  if(!rows.length){ listEl.innerHTML='<div class="text-[#64748b] text-sm py-6 text-center">No activity.</div>'; return; }
+  listEl.innerHTML = rows.map(r=>{
+    const ac  = AGENT_COLOR[r.sender]||'text-[#94a3b8]';
+    const ts  = r.timestamp ? relTime(r.timestamp) : '';
+    const proj= r.project ? `<span class="tag text-[10px]">${esc(r.project)}</span>` : '';
+    return `<div class="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-[#14141f] transition-colors">
+      <span class="${ac} text-[11px] font-semibold shrink-0 w-12 text-right">${esc(r.sender||'?')}</span>
+      <span class="flex-1 text-[12px] text-[#cbd5e1] leading-relaxed">${esc(r.message||'')}</span>
+      <div class="flex items-center gap-1.5 shrink-0">${proj}<span class="text-[#64748b] text-[11px]">${ts}</span></div>
+    </div>`;
+  }).join('');
+}
+
+async function loadBoardKnowledge(){
+  const rows = await api('/api/board/knowledge');
+  boardSubLoaded.knowledge = true;
+  const listEl = document.getElementById('board-knowledge-list');
+  if(!rows.length){ listEl.innerHTML='<div class="text-[#64748b] text-sm py-6 text-center">No knowledge records.</div>'; return; }
+  listEl.innerHTML = rows.map(r=>{
+    const ts   = r.promoted_at ? relTime(r.promoted_at) : '';
+    const proj = r.project ? `<span class="tag text-[10px]">${esc(r.project)}</span>` : '';
+    const tags = (r.tags||[]).map(t=>`<span class="tag text-[10px]">${esc(t)}</span>`).join('');
+    const ac   = AGENT_COLOR[r.promoted_by]||'text-[#94a3b8]';
+    const preview = (r.content||'').slice(0,280);
+    return `<div class="card px-4 py-3 fade-in">
+      <div class="text-white text-[13px] font-medium mb-1.5">${esc(r.title||'Untitled')}</div>
+      <div class="text-[#94a3b8] text-[12px] leading-relaxed mb-2">${esc(preview)}${(r.content||'').length>280?'…':''}</div>
+      <div class="flex items-center gap-2 flex-wrap text-[11px]">
+        <span class="${ac}">${esc(r.promoted_by||'?')}</span>
+        <span class="text-[#64748b]">·</span>
+        <span class="text-[#64748b]">${ts}</span>
+        <span class="font-mono text-[#4f46e5] text-[10px]">${esc(r.id||'')}</span>
+        ${proj}${tags}
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 history.replaceState({tab:'browse',tag:null},'','#browse');

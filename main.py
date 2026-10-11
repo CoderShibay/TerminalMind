@@ -2,13 +2,13 @@
 """
 tm — TerminalMind CLI
 Usage:
-    tm serve                         Launch browser dashboard (localhost:8888)
+    tm serve                         Launch browser dashboard (localhost:7777)
     tm serve --no-browser            Run server only, no browser open
-    tm sync                          Re-index all Claude files + shell log
+    tm sync                          Re-index Claude, Codex, AGY + shell log
     tm verify                        Check what's indexed + health report
     tm status                        Active sessions + DB stats
     tm search <query> [--last Nd]    Full-text search across all conversations
-    tm sessions [--project NAME]     List Claude Code sessions
+    tm sessions [--project NAME]     List AI sessions
     tm digest                        Morning briefing — pinned, today, yesterday, week stats
     tm report                        Project activity report with bar charts
     tm report --days 7               Report for last 7 days (default: 30)
@@ -30,6 +30,8 @@ Usage:
     tm push SESSION_ID PROJECT --dry-run  Preview without writing
     tm push init PROJECT               Create vault (Home.md + Build Log.md) from template
     tm push init PROJECT --path PATH   Create vault at a custom path
+    tm spelling                      Spelling mistakes in your prompts (checked by local llama3.2)
+    tm spelling --recent             Latest mistakes with context  (tm spelling help for more)
     tm service install               Auto-start server on login (macOS/Linux)
     tm service uninstall             Remove auto-start
     tm service status                Check if background service is running
@@ -40,16 +42,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db import init_db
-from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder, shell_commands as shell_idx
-from cli import search, sessions, session, status, verify, today, week, context, digest, report, history, shell, resume, link, push
+from indexer import agy_transcripts, claude_history, claude_sessions, claude_transcripts, codex_transcripts, title_engine, embedder, spelling as spelling_idx, shell_commands as shell_idx
+from cli import search, sessions, session, status, verify, today, week, context, digest, report, history, shell, resume, link, push, spelling
 
 HELP = __doc__
 
 
-def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True) -> None:
+def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True, spell: bool = True) -> None:
     h  = claude_history.run(conn)
     t  = claude_transcripts.run(conn)
     s  = claude_sessions.run(conn)
+    c  = codex_transcripts.run(conn)
+    a  = agy_transcripts.run(conn)
     sc = shell_idx.run(conn)
     if titles:
         titled, method = title_engine.run(conn, use_ollama=True)
@@ -57,13 +61,18 @@ def sync(conn, verbose: bool = True, titles: bool = True, embed: bool = True) ->
     else:
         title_note = "titles skipped"
     if embed:
-        e = embedder.run(conn, verbose=verbose and (h+t > 0))
+        e = embedder.run(conn, verbose=verbose and (h+t+c+a > 0))
         embed_note = f"{e} embedded" if e else "embeddings up to date"
     else:
         embed_note = "embeddings skipped"
+    if spell:
+        try:
+            spelling_idx.spawn_background(conn)   # llama3.2 spell check runs detached
+        except Exception:
+            pass
     if verbose:
         shell_note = f"  │  {sc} shell cmds" if sc else ""
-        print(f"  synced  {h} prompts  │  {t} messages  │  {s} sessions  │  {title_note}  │  {embed_note}{shell_note}")
+        print(f"  synced  {h} prompts  │  Claude {t} msgs/{s} sessions  │  Codex {c} msgs  │  AGY {a} msgs  │  {title_note}  │  {embed_note}{shell_note}")
 
 
 def main():
@@ -80,7 +89,7 @@ def main():
     if cmd == "serve":
         from server import serve
         no_browser = "--no-browser" in rest
-        port = 8888
+        port = 7777
         if "--port" in rest:
             i = rest.index("--port")
             if i + 1 < len(rest) and rest[i + 1].isdigit():
@@ -94,7 +103,7 @@ def main():
 
     elif cmd == "sync":
         print()
-        sync(conn)
+        sync(conn, embed="--no-embed" not in rest)
         print()
 
     elif cmd == "verify":
@@ -160,6 +169,11 @@ def main():
     elif cmd == "sessions":
         sync(conn, verbose=False)
         sessions.run(conn, rest)
+
+    elif cmd == "spelling":
+        scanning = bool(rest) and rest[0] == "scan"
+        sync(conn, verbose=False, titles=not scanning, embed=False, spell=not scanning)
+        spelling.run(conn, rest)
 
     elif cmd == "service":
         from service import install, uninstall, status as svc_status

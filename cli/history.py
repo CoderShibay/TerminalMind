@@ -87,6 +87,7 @@ def run(conn, args: list[str]) -> int:
     limit          = 50
     show_prompts   = False
     show_shell     = False
+    agent_filter   = None
 
     i = 0
     while i < len(args):
@@ -100,12 +101,18 @@ def run(conn, args: list[str]) -> int:
             show_prompts = True; i += 1
         elif args[i] == "--shell":
             show_shell = True; i += 1
+        elif args[i] == "--agent" and i + 1 < len(args):
+            agent_filter = args[i + 1].lower(); i += 2
         else:
             i += 1
 
-    # ── Fetch Claude sessions ─────────────────────────────────────────────────
+    if agent_filter and agent_filter not in {"claude", "codex", "agy"}:
+        print("\n  --agent must be claude, codex, or agy.\n")
+        return 1
+
+    # ── Fetch AI sessions ─────────────────────────────────────────────────────
     sql = """
-        SELECT s.session_id, s.started_at, s.kind,
+        SELECT s.session_id, s.native_session_id, s.agent, s.started_at, s.kind,
                COUNT(m.id) as msg_count,
                MIN(m.ts)   as first_msg,
                MAX(m.ts)   as last_msg,
@@ -129,6 +136,10 @@ def run(conn, args: list[str]) -> int:
         wheres.append("(t.project_tags LIKE ? OR t.title LIKE ?)")
         params += [f"%{project_filter}%", f"%{project_filter}%"]
 
+    if agent_filter:
+        wheres.append("s.agent = ?")
+        params.append(agent_filter)
+
     if wheres:
         sql += " WHERE " + " AND ".join(wheres)
 
@@ -142,6 +153,7 @@ def run(conn, args: list[str]) -> int:
     if project_filter: filter_parts.append(f"project: {project_filter}")
     if days_filter:    filter_parts.append(f"last {days_filter} days")
     if show_shell:     filter_parts.append("+ shell commands")
+    if agent_filter:   filter_parts.append(f"agent: {agent_filter}")
     filter_str = "  —  " + ", ".join(filter_parts) if filter_parts else ""
 
     print()
@@ -156,7 +168,7 @@ def run(conn, args: list[str]) -> int:
 
     # ── Standard mode ─────────────────────────────────────────────────────────
     print(f"  \033[1mSession History{filter_str}\033[0m  ({len(session_rows)} sessions)\n")
-    print(f"  {'DATE & TIME':<20} {'TITLE':<40} {'MSGS':>5}  {'DUR':>5}  ID")
+    print(f"  {'DATE & TIME':<20} {'AGENT':<7} {'TITLE':<36} {'MSGS':>5}  {'DUR':>5}  ID")
     print("  " + "─" * 82)
 
     current_date = None
@@ -169,10 +181,10 @@ def run(conn, args: list[str]) -> int:
                 print()
             current_date = date_part
 
-        title     = (r["title"] or "Untitled session")[:40]
+        title     = (r["title"] or "Untitled session")[:36]
         msgs      = r["msg_count"] or 0
         dur       = _duration(r["first_msg"], r["last_msg"])
-        sid       = r["session_id"][:8]
+        sid       = (r["native_session_id"] or r["session_id"])[:8]
         is_pinned = r["is_pinned"]
         has_note  = bool(r["note"])
         kind      = r["kind"]
@@ -187,7 +199,7 @@ def run(conn, args: list[str]) -> int:
             tag_list = [t.strip() for t in r["project_tags"].split(",") if t.strip()][:2]
             tags = "  \033[2m" + " ".join(f"[{t}]" for t in tag_list) + "\033[0m"
 
-        print(f"  {ts_str:<20} {title:<40} {msgs:>5}  {dur:>5}  \033[2m{sid}\033[0m{badges}{tags}")
+        print(f"  {ts_str:<20} {r['agent'].upper():<7} {title:<36} {msgs:>5}  {dur:>5}  \033[2m{sid}\033[0m{badges}{tags}")
 
         if has_note and r["note"]:
             note = r["note"][:60] + ("…" if len(r["note"]) > 60 else "")
@@ -205,6 +217,7 @@ def run(conn, args: list[str]) -> int:
     hints = []
     if not project_filter: hints.append("\033[2m--project NAME\033[0m to filter")
     if not days_filter:    hints.append("\033[2m--days 7\033[0m for last week")
+    if not agent_filter:   hints.append("\033[2m--agent NAME\033[0m to filter")
     hints.append("\033[2m--shell\033[0m to include terminal commands")
     if hints:
         print("  " + "  ·  ".join(hints))
@@ -213,7 +226,7 @@ def run(conn, args: list[str]) -> int:
 
 
 def _render_interleaved(conn, session_rows, project_filter, days_filter, filter_str) -> int:
-    """Render Claude sessions and shell commands merged into one chronological timeline."""
+    """Render AI sessions and shell commands merged into one chronological timeline."""
 
     # ── Fetch shell commands ──────────────────────────────────────────────────
     shell_sql = """

@@ -1,4 +1,4 @@
-"""tm search — full-text search across all Claude conversations."""
+"""tm search — full-text search across all indexed AI conversations."""
 import sys
 from datetime import datetime, timedelta
 
@@ -30,13 +30,14 @@ def _ts_to_human(ts: str | None) -> str:
 
 def run(conn, args: list[str]) -> int:
     if not args:
-        print("Usage: tm search <query> [--last 7d|30d|24h] [--project NAME]")
+        print("Usage: tm search <query> [--last 7d|30d|24h] [--project NAME] [--agent NAME]")
         return 1
 
     # Parse args
     query_parts = []
     time_filter = None
     project_filter = None
+    agent_filter = None
     i = 0
     while i < len(args):
         if args[i] == "--last" and i + 1 < len(args):
@@ -44,6 +45,12 @@ def run(conn, args: list[str]) -> int:
             i += 2
         elif args[i] == "--project" and i + 1 < len(args):
             project_filter = args[i + 1]
+            i += 2
+        elif args[i] == "--agent" and i + 1 < len(args):
+            agent_filter = args[i + 1].lower()
+            if agent_filter not in {"claude", "codex", "agy"}:
+                print("Error: --agent must be claude, codex, or agy.")
+                return 1
             i += 2
         else:
             query_parts.append(args[i])
@@ -65,9 +72,12 @@ def run(conn, args: list[str]) -> int:
             m.ts,
             m.project,
             m.cwd,
-            m.session_id
+            m.session_id,
+            m.agent,
+            s.native_session_id
         FROM messages_fts fts
         JOIN claude_messages m ON m.id = fts.rowid
+        LEFT JOIN claude_sessions s ON s.session_id = m.session_id
         WHERE messages_fts MATCH ?
     """
     msg_params = [query]
@@ -78,6 +88,9 @@ def run(conn, args: list[str]) -> int:
     if project_filter:
         msg_sql += " AND m.project LIKE ?"
         msg_params.append(f"%{project_filter}%")
+    if agent_filter:
+        msg_sql += " AND m.agent = ?"
+        msg_params.append(agent_filter)
 
     msg_sql += " ORDER BY m.ts DESC LIMIT 30"
 
@@ -90,6 +103,8 @@ def run(conn, args: list[str]) -> int:
             "ts": row["ts"],
             "project": row["project"] or "unknown",
             "session_id": row["session_id"],
+            "native_session_id": row["native_session_id"] or row["session_id"],
+            "agent": row["agent"],
         })
 
     # Search prompts (history.jsonl — deduplicate by session already in messages)
@@ -112,7 +127,8 @@ def run(conn, args: list[str]) -> int:
     prompt_sql += " ORDER BY p.ts DESC LIMIT 20"
 
     seen_sessions = {r["session_id"] for r in results}
-    for row in conn.execute(prompt_sql, prompt_params):
+    prompt_rows = [] if agent_filter and agent_filter != "claude" else conn.execute(prompt_sql, prompt_params)
+    for row in prompt_rows:
         if row["session_id"] in seen_sessions:
             continue
         ts_dt = datetime.fromtimestamp(row["ts"] / 1000).isoformat() if row["ts"] else None
@@ -123,6 +139,8 @@ def run(conn, args: list[str]) -> int:
             "ts": ts_dt,
             "project": row["project"] or "?",
             "session_id": row["session_id"],
+            "native_session_id": row["session_id"],
+            "agent": "claude",
         })
 
     if not results:
@@ -137,10 +155,11 @@ def run(conn, args: list[str]) -> int:
     for r in results:
         if r["session_id"] != current_session:
             current_session = r["session_id"]
-            print(f"\n  SESSION  {r['session_id'][:8]}…  │  {r['project']}  │  {_ts_to_human(r['ts'])}")
+            short_id = r["native_session_id"][:8]
+            print(f"\n  {r['agent'].upper():<6}  {short_id}…  │  {r['project']}  │  {_ts_to_human(r['ts'])}")
             print("  " + "─" * 68)
 
-        role_label = "YOU  " if r["role"] == "user" else "ASST "
+        role_label = "YOU  " if r["role"] == "user" else f"{r['agent'][:4].upper():<5}"
         text = r["text"].replace("\n", " ").strip()
         # Highlight query terms in output
         for term in query.split():

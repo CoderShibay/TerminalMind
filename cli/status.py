@@ -1,4 +1,4 @@
-"""tm status — show active Claude sessions and DB stats."""
+"""tm status — show active AI sessions and DB stats."""
 from datetime import datetime
 from pathlib import Path
 
@@ -17,16 +17,16 @@ def run(conn, args: list[str]) -> int:
 
     # Active sessions
     active = conn.execute(
-        "SELECT session_id, pid, cwd, project, started_at FROM claude_sessions WHERE status = 'active' ORDER BY started_at DESC"
+        "SELECT session_id, native_session_id, agent, pid, cwd, project, started_at FROM claude_sessions WHERE status = 'active' ORDER BY started_at DESC"
     ).fetchall()
 
     if active:
         print("  \033[32m● ACTIVE SESSIONS\033[0m")
         for row in active:
             project = row["project"] or row["cwd"] or "?"
-            print(f"    PID {row['pid']}  │  {project}  │  since {_ts_human(row['started_at'])}")
+            print(f"    {row['agent'].upper()}  │  PID {row['pid'] or '-'}  │  {project}  │  since {_ts_human(row['started_at'])}")
     else:
-        print("  \033[2m○ No active Claude sessions\033[0m")
+        print("  \033[2m○ No active AI sessions\033[0m")
 
     print()
 
@@ -39,6 +39,10 @@ def run(conn, args: list[str]) -> int:
 
     print("  \033[1mDATABASE\033[0m")
     print(f"    {total_prompts:,} prompts  │  {total_sessions} sessions  │  {total_msgs:,} messages ({user_msgs:,} user / {asst_msgs:,} assistant)")
+    agent_counts = conn.execute(
+        "SELECT agent, COUNT(*) AS c FROM claude_sessions GROUP BY agent ORDER BY agent"
+    ).fetchall()
+    print("    " + "  │  ".join(f"{row['agent']} {row['c']:,}" for row in agent_counts))
 
     # Projects breakdown
     projects = conn.execute(

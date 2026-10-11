@@ -211,6 +211,7 @@ def _enrich_projects(conn) -> None:
                   MIN(ts) as first_ts,
                   MAX(ts) as last_ts
            FROM claude_messages
+           WHERE agent = 'claude'
            GROUP BY session_id"""
     ).fetchall()
 
@@ -262,11 +263,11 @@ def _enrich_projects(conn) -> None:
 
     if updates:
         conn.executemany(
-            "UPDATE claude_messages SET project = ?, cwd = ? WHERE session_id = ?",
+            "UPDATE claude_messages SET project = ?, cwd = ? WHERE session_id = ? AND agent = 'claude'",
             updates,
         )
         conn.executemany(
-            "UPDATE claude_sessions SET project = ?, cwd = ? WHERE session_id = ?",
+            "UPDATE claude_sessions SET project = ?, cwd = ? WHERE session_id = ? AND agent = 'claude'",
             updates,
         )
         conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")

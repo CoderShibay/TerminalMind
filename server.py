@@ -59,6 +59,9 @@ def api_status():
     total_sessions = conn.execute("SELECT COUNT(*) FROM claude_sessions").fetchone()[0]
     user_msgs      = conn.execute("SELECT COUNT(*) FROM claude_messages WHERE role='user'").fetchone()[0]
     asst_msgs      = conn.execute("SELECT COUNT(*) FROM claude_messages WHERE role='assistant'").fetchone()[0]
+    agent_counts = conn.execute(
+        "SELECT agent, COUNT(*) AS sessions FROM claude_sessions GROUP BY agent ORDER BY agent"
+    ).fetchall()
 
     db_path = Path(__file__).parent / "db" / "terminalmd.db"
     db_size_kb = db_path.stat().st_size / 1024 if db_path.exists() else 0
@@ -86,6 +89,7 @@ def api_status():
         "total_sessions": total_sessions,
         "user_messages": user_msgs,
         "assistant_messages": asst_msgs,
+        "agents": {row["agent"]: row["sessions"] for row in agent_counts},
         "db_size_kb": round(db_size_kb, 1),
         "projects": [{"name": r["project"], "count": r["c"]} for r in projects],
         "active_sessions": [
@@ -97,14 +101,17 @@ def api_status():
 
 
 @app.get("/api/sessions")
-def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
+def api_sessions(tag: str = Query(default=""), agent: str = Query(default=""),
+                 limit: int = Query(default=200)):
     conn = get_conn()
     sql = """
-        SELECT s.session_id, s.started_at, s.updated_at, s.status, s.kind,
+        SELECT s.session_id, s.native_session_id, s.agent, s.started_at,
+               s.updated_at, s.status, s.kind, s.project, s.cwd,
                COUNT(m.id) as msg_count,
                MIN(m.ts) as first_msg,
                MAX(m.ts) as last_msg,
-               t.title, t.summary, t.project_tags, t.method
+               t.title, t.summary, t.project_tags, t.method,
+               COALESCE(p.prompt_count, 0) AS prompt_count
         FROM claude_sessions s
         LEFT JOIN claude_messages m ON m.session_id = s.session_id
         LEFT JOIN session_titles t ON t.session_id = s.session_id
@@ -113,9 +120,15 @@ def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
                   ON p.session_id = s.session_id
     """
     params = []
+    wheres = []
     if tag:
-        sql += " WHERE t.project_tags LIKE ?"
+        wheres.append("t.project_tags LIKE ?")
         params.append(f"%{tag}%")
+    if agent:
+        wheres.append("s.agent = ?")
+        params.append(agent.lower())
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
     sql += " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT ?"
     params.append(limit)
 
@@ -134,7 +147,7 @@ def api_sessions(tag: str = Query(default=""), limit: int = Query(default=200)):
 def api_session_detail(session_id: str):
     conn = get_conn()
     messages = conn.execute(
-        """SELECT role, content_text, tool_name, ts
+        """SELECT role, content_text, tool_name, ts, agent
            FROM claude_messages
            WHERE session_id = ?
              AND (content_text IS NOT NULL OR tool_name IS NOT NULL)
@@ -147,7 +160,8 @@ def api_session_detail(session_id: str):
 
     # History-only session — return prompts formatted as messages
     prompts = conn.execute(
-        """SELECT prompt_text as content_text, ts, 'user' as role, NULL as tool_name
+        """SELECT prompt_text as content_text, ts, 'user' as role, NULL as tool_name,
+                  'claude' AS agent
            FROM claude_prompts WHERE session_id = ? ORDER BY ts ASC""",
         (session_id,),
     ).fetchall()
@@ -174,6 +188,7 @@ def api_search(
     q: str = Query(default=""),
     last: str = Query(default=""),
     project: str = Query(default=""),
+    agent: str = Query(default=""),
     limit: int = Query(default=40),
 ):
     if not q:
@@ -185,9 +200,11 @@ def api_search(
     # Messages FTS
     msg_sql = """
         SELECT m.role, m.content_text, m.tool_name, m.ts,
-               m.project, m.cwd, m.session_id, m.uuid
+               m.project, m.cwd, m.session_id, m.uuid, m.agent,
+               s.native_session_id
         FROM messages_fts fts
         JOIN claude_messages m ON m.id = fts.rowid
+        LEFT JOIN claude_sessions s ON s.session_id = m.session_id
         WHERE messages_fts MATCH ?
     """
     params = [q]
@@ -206,6 +223,9 @@ def api_search(
     if project:
         msg_sql += " AND m.project LIKE ?"
         params.append(f"%{project}%")
+    if agent:
+        msg_sql += " AND m.agent = ?"
+        params.append(agent.lower())
     msg_sql += f" ORDER BY m.ts DESC LIMIT {limit}"
 
     for row in conn.execute(msg_sql, params):
@@ -218,6 +238,8 @@ def api_search(
             "project": row["project"] or "unknown",
             "session_id": row["session_id"],
             "uuid": row["uuid"],
+            "agent": row["agent"],
+            "native_session_id": row["native_session_id"] or row["session_id"],
         })
 
     # Prompts FTS (for sessions not already in results)
@@ -234,7 +256,8 @@ def api_search(
         p_params.append(f"%{project}%")
     prompt_sql += f" ORDER BY p.ts DESC LIMIT 20"
 
-    for row in conn.execute(prompt_sql, p_params):
+    prompt_rows = [] if agent and agent.lower() != "claude" else conn.execute(prompt_sql, p_params)
+    for row in prompt_rows:
         if row["session_id"] in seen:
             continue
         ts_str = None
@@ -251,6 +274,8 @@ def api_search(
             "project": row["project"] or "unknown",
             "session_id": row["session_id"],
             "uuid": None,
+            "agent": "claude",
+            "native_session_id": row["session_id"],
         })
 
     return results
@@ -498,7 +523,7 @@ def api_export(session_id: str):
         "SELECT started_at FROM claude_sessions WHERE session_id=?", (session_id,)
     ).fetchone()
     messages = conn.execute(
-        """SELECT role, content_text, tool_name, ts FROM claude_messages
+        """SELECT role, content_text, tool_name, ts, agent FROM claude_messages
            WHERE session_id=? AND (content_text IS NOT NULL OR tool_name IS NOT NULL)
            ORDER BY ts ASC""",
         (session_id,)
@@ -526,7 +551,7 @@ def api_export(session_id: str):
         if msg["tool_name"] and not msg["content_text"]:
             lines += [f"> `[tool: {msg['tool_name']}]`", ""]
             continue
-        role  = "**You**" if msg["role"] == "user" else "**Claude**"
+        role  = "**You**" if msg["role"] == "user" else f"**{str(msg['agent']).upper()}**"
         text  = (msg["content_text"] or "").strip()
         lines += [f"{role}", "", text, ""]
 
@@ -667,18 +692,346 @@ def api_shell_projects():
     return sorted(projects.keys())
 
 
+@app.get("/api/files")
+def api_files(project: str = "", agent: str = "", since: str = "", limit: int = 200):
+    from datetime import datetime, timedelta, timezone
+    conn = get_conn()
+    clauses = [
+        "f.file_path NOT LIKE '/private/tmp/%'",
+        "f.file_path NOT LIKE '%.output'",
+        "f.file_path NOT LIKE '%__pycache__%'",
+        "f.file_path NOT LIKE '%.pyc'",
+    ]
+    params: list = []
+    if project:
+        clauses.append("f.project = ?")
+        params.append(project)
+    if agent:
+        clauses.append("COALESCE(s.agent, 'claude') = ?")
+        params.append(agent)
+    if since:
+        now = datetime.now(timezone.utc)
+        delta = {"1d": 1, "7d": 7, "30d": 30}.get(since)
+        cutoff = (now - timedelta(days=delta)).isoformat() if delta else since
+        clauses.append("f.ts >= ?")
+        params.append(cutoff)
+    where = "WHERE " + " AND ".join(clauses)
+    rows = conn.execute(f"""
+        SELECT f.file_path,
+               COUNT(*)                      AS touches,
+               GROUP_CONCAT(DISTINCT f.tool_name) AS tools,
+               COUNT(DISTINCT f.session_id)   AS sessions,
+               MIN(f.ts)                      AS first_touch,
+               MAX(f.ts)                      AS last_touch,
+               GROUP_CONCAT(DISTINCT COALESCE(s.agent, 'claude')) AS agents
+        FROM file_touches f
+        LEFT JOIN claude_sessions s ON s.session_id = f.session_id
+        {where}
+        GROUP BY f.file_path
+        ORDER BY touches DESC
+        LIMIT ?
+    """, params + [limit]).fetchall()
+    projects = conn.execute(
+        "SELECT DISTINCT project FROM file_touches WHERE project IS NOT NULL ORDER BY project"
+    ).fetchall()
+    total = conn.execute(
+        f"""SELECT COUNT(DISTINCT f.file_path)
+              FROM file_touches f
+              LEFT JOIN claude_sessions s ON s.session_id = f.session_id
+              {where}""", params
+    ).fetchone()[0]
+    files = []
+    for row in rows:
+        item = dict(row)
+        item["agents"] = sorted((item.get("agents") or "").split(","))
+        files.append(item)
+    return {
+        "files":        files,
+        "total_files":  total,
+        "projects":     [r["project"] for r in projects],
+    }
+
+
 @app.post("/api/sync")
 def api_sync():
     global _embed_dirty
-    from indexer import claude_history, claude_sessions, claude_transcripts, title_engine, embedder
+    from indexer import agy_transcripts, claude_history, claude_sessions, claude_transcripts, codex_transcripts, title_engine, embedder, file_hotspots
     conn = get_conn()
     h = claude_history.run(conn)
     t = claude_transcripts.run(conn)
     s = claude_sessions.run(conn)
+    c = codex_transcripts.run(conn)
+    a = agy_transcripts.run(conn)
     titled, _ = title_engine.run(conn, use_ollama=False)
     e = embedder.run(conn)
-    _embed_dirty = True   # invalidate cache so next semantic search reloads
-    return {"prompts": h, "messages": t, "sessions": s, "titles": titled, "embedded": e}
+    file_hotspots.run(conn)
+    _embed_dirty = True
+    return {"prompts": h, "claude_messages": t, "claude_sessions": s,
+            "codex_messages": c, "agy_messages": a, "titles": titled, "embedded": e}
+
+
+import re as _re
+
+# Lines that START with a real error indicator
+_ERROR_LEAD = _re.compile(
+    r'^(<tool_use_error>|Exit code \d|'
+    r'(?:Module|Syntax|Type|Value|Key|Attribute|Import|Runtime|Assertion|'
+    r'FileNotFound|Name|UnboundLocal|Index|OS|IO|Connection|Timeout|'
+    r'JSONDecode|UnicodeDecodeError|Permission|ZeroDivision|Recursion|'
+    r'StopIteration|OverflowError|MemoryError)Error[:\s]|'
+    r'Error:|ERROR:|FAILED[:\s]|No such file|Permission denied|'
+    r'cannot access|not found:|invalid syntax)',
+    _re.IGNORECASE,
+)
+# Lines to skip: source code, markdown, numbered source lines, shell prompts
+_SKIP_LINE = _re.compile(
+    r'^(\s*(def |class |if |for |while |try:|except |raise |import |from |#|//|>>|\||'
+    r'\*\*|[-*] \*\*|^\d+\s+(def |class |if |#|except|import|raise|\*|-|_|val )))'
+)
+
+
+def _extract_error_signature(text: str) -> str | None:
+    """Return the most useful error line from a tool_result message."""
+    lines = text.strip().splitlines()
+
+    # Traceback: use the last line (actual exception)
+    if "Traceback (most recent call last)" in text:
+        for line in reversed(lines):
+            line = line.strip()
+            if not line or line.startswith("File ") or line.startswith("^") or "^^^" in line:
+                continue
+            if _ERROR_LEAD.match(line):
+                sig = _normalise(line)
+                if len(sig) >= 20:
+                    return sig
+
+    # tool_use_error block or plain error lines
+    for line in lines:
+        line = line.strip()
+        if not line or _SKIP_LINE.match(line):
+            continue
+        if _ERROR_LEAD.match(line):
+            sig = _normalise(line)
+            if len(sig) >= 20:
+                return sig
+
+    return None
+
+
+def _normalise(line: str) -> str:
+    """Strip volatile parts so similar errors collapse to the same key."""
+    s = line
+    s = _re.sub(r'/[^\s\'",:)>]+', '<path>', s)           # file paths
+    s = _re.sub(r"'[^']{1,40}'", "'X'", s)                 # quoted names
+    s = _re.sub(r'"[^"]{1,40}"', '"X"', s)                 # double-quoted names
+    s = _re.sub(r'\b0x[0-9a-fA-F]+\b', '0xADDR', s)        # memory addresses
+    s = _re.sub(r'\bline \d+\b', 'line N', s)               # line numbers
+    s = _re.sub(r'\b\d{4,}\b', 'N', s)                     # long numbers
+    s = _re.sub(r'\s+', ' ', s).strip()
+    return s[:140]
+
+
+@app.get("/api/errors")
+def api_errors(project: str = "", agent: str = "", since: str = "", limit: int = 100):
+    from datetime import datetime, timedelta, timezone
+    from collections import defaultdict
+    conn = get_conn()
+
+    clauses = [
+        "role = 'tool_result'",
+        "(content_text LIKE '%Error%' OR content_text LIKE '%Traceback%'"
+        " OR content_text LIKE '%Exception%' OR content_text LIKE 'Exit code%'"
+        " OR content_text LIKE '%No such file%' OR content_text LIKE '%FAILED%'"
+        " OR content_text LIKE '%permission denied%')",
+    ]
+    params: list = []
+    if project:
+        clauses.append("project = ?")
+        params.append(project)
+    if agent:
+        clauses.append("agent = ?")
+        params.append(agent)
+    if since:
+        now = datetime.now(timezone.utc)
+        delta = {"1d": 1, "7d": 7, "30d": 30}.get(since)
+        cutoff = (now - timedelta(days=delta)).isoformat() if delta else since
+        clauses.append("ts >= ?")
+        params.append(cutoff)
+
+    rows = conn.execute(
+        f"SELECT content_text, session_id, project, ts, agent FROM claude_messages WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY ts DESC LIMIT 2000",
+        params,
+    ).fetchall()
+
+    # Extract and group by normalised signature
+    by_sig: dict[str, dict] = defaultdict(lambda: {
+        "count": 0, "sessions": set(), "projects": set(),
+        "first": None, "last": None, "example": None, "agents": set(),
+    })
+
+    for r in rows:
+        sig = _extract_error_signature(r["content_text"] or "")
+        if not sig:
+            continue
+        entry = by_sig[sig]
+        entry["count"] += 1
+        if r["session_id"]:
+            entry["sessions"].add(r["session_id"])
+        entry["agents"].add(r["agent"] or "claude")
+        if r["project"]:
+            entry["projects"].add(r["project"])
+        ts = r["ts"] or ""
+        if not entry["first"] or ts < entry["first"]:
+            entry["first"] = ts
+        if not entry["last"] or ts > entry["last"]:
+            entry["last"] = ts
+        if entry["example"] is None:
+            entry["example"] = (r["content_text"] or "")[:300]
+
+    results = [
+        {
+            "signature":  sig,
+            "count":      e["count"],
+            "sessions":   len(e["sessions"]),
+            "projects":   sorted(e["projects"]),
+            "agents":     sorted(e["agents"]),
+            "first_seen": e["first"],
+            "last_seen":  e["last"],
+            "example":    e["example"],
+        }
+        for sig, e in by_sig.items()
+    ]
+    results.sort(key=lambda x: (x["sessions"], x["count"]), reverse=True)
+
+    agent_counts: dict[str, int] = {}
+    for result in results:
+        for source_agent in result["agents"]:
+            agent_counts[source_agent] = agent_counts.get(source_agent, 0) + result["count"]
+
+    projects_all = conn.execute(
+        "SELECT DISTINCT project FROM claude_messages WHERE role='tool_result' AND project IS NOT NULL ORDER BY project"
+    ).fetchall()
+
+    return {
+        "errors":   results[:limit],
+        "total":    len(results),
+        "projects": [r["project"] for r in projects_all],
+        "agent_counts": agent_counts,
+    }
+
+
+def _normalise_tool_name(agent: str, tool_name: str, content_text: str | None) -> str:
+    """Expose AGY's generic MCP wrapper as the actual server/tool pair."""
+    if agent != "agy" or tool_name != "call_mcp_tool" or not content_text:
+        return tool_name
+    try:
+        payload = __import__("json").loads(content_text)
+    except (TypeError, ValueError):
+        return tool_name
+    server = payload.get("ServerName") if isinstance(payload, dict) else None
+    tool = payload.get("ToolName") if isinstance(payload, dict) else None
+    if server and tool:
+        return f"mcp__{server}__{tool}"
+    return tool_name
+
+
+@app.get("/api/tools")
+def api_tools(since: str = "", agent: str = ""):
+    from datetime import datetime, timedelta, timezone
+    conn = get_conn()
+    where = "role = 'assistant' AND tool_name IS NOT NULL AND tool_name != ''"
+    params: list = []
+    if agent:
+        where += " AND agent = ?"
+        params.append(agent)
+    if since:
+        now = datetime.now(timezone.utc)
+        delta = {"1d": 1, "7d": 7, "30d": 30}.get(since)
+        cutoff = (now - timedelta(days=delta)).isoformat() if delta else since
+        where += " AND ts >= ?"
+        params.append(cutoff)
+    rows = conn.execute(f"""
+        SELECT agent, tool_name, content_text, ts
+        FROM claude_messages
+        WHERE {where}
+    """, params).fetchall()
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        name = _normalise_tool_name(row["agent"], row["tool_name"], row["content_text"])
+        if name == "inter_agent_message":
+            continue
+        item = grouped.setdefault(name, {
+            "tool_name": name, "cnt": 0, "first_used": None, "last_used": None,
+            "agents": set(), "agent_counts": {},
+        })
+        item["cnt"] += 1
+        item["agents"].add(row["agent"])
+        item["agent_counts"][row["agent"]] = item["agent_counts"].get(row["agent"], 0) + 1
+        ts = row["ts"]
+        if ts and (not item["first_used"] or ts < item["first_used"]):
+            item["first_used"] = ts
+        if ts and (not item["last_used"] or ts > item["last_used"]):
+            item["last_used"] = ts
+    tools = []
+    for item in grouped.values():
+        item["agents"] = sorted(item["agents"])
+        tools.append(item)
+    tools.sort(key=lambda item: (-item["cnt"], item["tool_name"].lower()))
+    return {
+        "tools": tools,
+        "total_calls": sum(t["cnt"] for t in tools),
+        "unique_tools": len(tools),
+        "agent_counts": {
+            source_agent: sum(t["agent_counts"].get(source_agent, 0) for t in tools)
+            for source_agent in ("claude", "codex", "agy")
+        },
+    }
+
+
+BOARD_DIR = Path("/Users/alisyed/Documents/MessageBoard")
+
+def _read_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    rows = []
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    rows.append(__import__("json").loads(line))
+                except Exception:
+                    pass
+    return rows
+
+
+@app.get("/api/board/tasks")
+def api_board_tasks(status: str = "", project: str = "", limit: int = 100):
+    rows = _read_jsonl(BOARD_DIR / "tasks.jsonl")
+    rows = [r for r in rows if r.get("type") == "task"]
+    if status:
+        rows = [r for r in rows if r.get("status") == status]
+    if project:
+        rows = [r for r in rows if (r.get("project") or "").lower() == project.lower()]
+    rows.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return rows[:limit]
+
+
+@app.get("/api/board/activity")
+def api_board_activity(limit: int = 80):
+    rows = _read_jsonl(BOARD_DIR / "messages.jsonl")
+    rows = [r for r in rows if r.get("type") in ("activity", "post")]
+    rows.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return rows[:limit]
+
+
+@app.get("/api/board/knowledge")
+def api_board_knowledge(limit: int = 50):
+    rows = _read_jsonl(BOARD_DIR / "knowledge.jsonl")
+    rows.sort(key=lambda r: r.get("promoted_at", ""), reverse=True)
+    return rows[:limit]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -689,13 +1042,15 @@ def root():
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 def serve(port: int = 8888, open_browser: bool = True, no_browser: bool = False):
-    from indexer import claude_history, claude_sessions, claude_transcripts
+    from indexer import agy_transcripts, claude_history, claude_sessions, claude_transcripts, codex_transcripts
     conn = get_conn()
     print("\n  Syncing...")
     h = claude_history.run(conn)
     t = claude_transcripts.run(conn)
     s = claude_sessions.run(conn)
-    print(f"  {h} prompts  │  {t} messages  │  {s} sessions\n")
+    c = codex_transcripts.run(conn)
+    a = agy_transcripts.run(conn)
+    print(f"  {h} prompts  │  Claude {t} messages/{s} sessions  │  Codex {c}  │  AGY {a}\n")
 
     if open_browser and not no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()

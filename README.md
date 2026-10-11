@@ -1,18 +1,18 @@
 # TerminalMind
 
-Search, browse, and extract context from your entire Claude Code history — plus every shell command you've ever run. Local dashboard, semantic search, smart context extraction.
+Search, browse, and extract context from your Claude, Codex, and AGY history — plus every shell command you've ever run. Local dashboard, semantic search, smart context extraction.
 
-Claude Code already saves every message, tool call, and prompt to disk. TerminalMind indexes that data, gives sessions readable titles, embeds everything for semantic search, and makes it instantly queryable — from the terminal or a browser dashboard.
+Your AI clients already save messages, tool calls, and prompts to disk. TerminalMind indexes those local stores, gives sessions readable titles, embeds visible conversation turns for semantic search, and makes everything instantly queryable from the terminal or a browser dashboard.
 
 ---
 
 ## What it does
 
-**Browse all sessions** — every Claude Code session with an Ollama-generated title (or heuristic fallback). Click any card to read the full conversation inline. Pin sessions, add notes, export as markdown.
+**Browse all sessions** — Claude, Codex, and AGY sessions carry source badges and readable titles. Click any card to read the full conversation inline. Pin sessions, add notes, export as markdown.
 
 **Semantic search** — find sessions by meaning, not just keywords. "How did we handle the pipeline issue" finds the right session even if those exact words never appeared. Three modes: Hybrid (default), Semantic, Keyword.
 
-**Smart context for Claude** — `tm context "question"` extracts only the relevant message excerpts (~300 tokens) and copies them to clipboard. Paste into any new Claude session. No re-explaining required.
+**Smart context for every agent** — `tm context "question"` extracts only the relevant message excerpts and copies them to the clipboard. Add `--agent claude|codex|agy` when the source matters.
 
 **Shell command history** — log every terminal command (timestamp, duration, exit code, project) and browse it in the CLI or the dashboard Shell tab.
 
@@ -27,7 +27,7 @@ Claude Code already saves every message, tool call, and prompt to disk. Terminal
 ## Requirements
 
 - Python 3.10+
-- [Claude Code](https://claude.ai/code) installed and used at least once
+- At least one supported client history: Claude Code, Codex, or AGY/Antigravity
 - Ollama (optional, for AI titles and digest summaries) — [ollama.com](https://ollama.com)
 
 ---
@@ -48,6 +48,17 @@ iwr https://raw.githubusercontent.com/CoderShibay/TerminalMind/main/install.ps1 
 ```bash
 pip install terminalmd
 ```
+
+TerminalMind loads its semantic-search model from the local Hugging Face cache
+and does not contact the network during normal commands. If the model is not
+cached yet, download it once while online:
+
+```bash
+TM_ALLOW_MODEL_DOWNLOAD=1 tm sync
+```
+
+After that, `tm` runs fully offline. Without the cached model, keyword search
+continues to work.
 
 ---
 
@@ -127,9 +138,11 @@ tm shell --search "build_ensemble"    # search command text
 # Search (human browsing)
 tm search "query"                     # keyword search across all conversations
 tm search "query" --last 7d           # filter by time
+tm search "query" --agent codex       # filter by source agent
 
 # Maintenance
-tm sync                               # re-index all Claude files + shell log
+tm sync                               # re-index Claude, Codex, AGY + shell log
+tm sync --no-embed                    # index text without generating embeddings
 tm verify                             # health report — what's indexed, what's missing
 tm status                             # DB stats and active sessions
 tm service install                    # auto-start server on login (macOS/Linux)
@@ -218,15 +231,16 @@ Open with `tm serve` → `http://localhost:8888`
 - **Stats panel** — This Week / This Month / All Time: sessions, prompts, top project
 - **Activity heatmap** — 52-week grid. Click any cell to filter sessions to that day.
 - **Pinned sessions** — pin important sessions to the top. Survive all filters.
-- **Session cards** — title (click ✎ to rename inline), project tags, date, message count
+- **Session cards** — source-agent badge, title (click ✎ to rename inline), project tags, date, message count
 - **Expand any card** — full conversation, note editor, export as `.md`, related sessions
 - **"prompts only" badge** — older sessions where only prompts were saved
+- Filter sessions by **All agents**, **Claude**, **Codex**, or **AGY**.
 
 ### Search tab
 - **Hybrid mode** (default) — keyword + semantic combined
 - **Semantic mode** — finds by meaning, not exact words. Purple bar shows relevance score.
 - **Keyword mode** — exact FTS5 word matching
-- Filter by time window. Pin sessions directly from results.
+- Filter by time window, project, and source agent. Pin sessions directly from results.
 
 ### Shell tab
 - Full terminal command history in the browser
@@ -235,6 +249,31 @@ Open with `tm serve` → `http://localhost:8888`
 - Commands grouped by day: `HH:MM:SS  ✓  3.2s  python3 run.py  [Segmentation]`
 - Failed commands shown in red
 - Setup instructions shown if hook isn't active yet
+
+### Board tab
+- Shows shared MessageBoard tasks, activity, and promoted knowledge
+- Preserves agent provenance from `posted_by`, `claimed_by`, `sender`, and `promoted_by`
+- Uses the same durable JSONL coordination records as Claude, Codex, and AGY
+
+### Tools tab
+- Total calls, unique tools, and the most-used tool
+- Filter by time, category (Core / MCP / Agent), source agent, or tool name
+- Counts assistant invocations once and excludes tool-result messages
+- Normalizes AGY MCP wrapper calls to their underlying `mcp__server__tool` name when available
+
+### Files tab
+- Ranks file hotspots by recorded read, edit, write, patch, and command activity
+- Extracts paths from Claude, Codex, and AGY tool formats
+- Filter by time, project, source agent, or path
+- Excludes directories and known path noise; this is an activity view, not a version-control audit
+
+### Errors tab
+- Groups normalized failure signatures across tool results
+- Filter by time, project, source agent, or text; optionally show recurring patterns only
+- Uses full namespaced session IDs so counts do not collide between clients
+
+The **Sync** button refreshes all three transcript sources, shell history, titles,
+embeddings, and derived file hotspots through `POST /api/sync`.
 
 ### Keyboard shortcuts (Browse tab)
 
@@ -252,13 +291,16 @@ Open with `tm serve` → `http://localhost:8888`
 
 ## How it works
 
-Claude Code writes your data to disk automatically:
+The supported clients write their data to disk automatically:
 
 | File | Contents | Indexed as |
 |------|----------|------------|
 | `~/.claude/history.jsonl` | Every prompt ever sent | `claude_prompts` |
 | `~/.claude/projects/**/*.jsonl` | Full conversation transcripts | `claude_messages` |
 | `~/.claude/sessions/*.json` | Session metadata | `claude_sessions` |
+| `~/.codex/sessions/**/*.jsonl` | Codex rollout transcripts | `claude_messages` with `agent=codex` |
+| `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript_full.jsonl` | AGY conversations | `claude_messages` with `agent=agy` |
+| `~/.gemini/antigravity-cli/conversation_summaries.db` | AGY titles and workspace metadata | `claude_sessions`, `session_titles` |
 | `~/.terminalmd/shell_log.jsonl` | Shell commands (from hook) | `shell_commands` |
 
 TerminalMind reads these files and builds a local SQLite database with:
@@ -295,7 +337,7 @@ Sessions titled by Ollama show `✦`. Without Ollama, titles come from the first
 | CLI | `~/.local/bin/tm` (macOS/Linux) · `~\.local\bin\tm.cmd` (Windows) |
 | Project config | `~/.tm_projects` (optional — custom vault paths for `tm push`) |
 
-Claude's original files in `~/.claude/` are never modified.
+Original client files are never modified. TerminalMind stores namespaced non-Claude IDs such as `codex:<native-id>` and `agy:<native-id>` while accepting native ID prefixes at lookup time.
 
 ---
 

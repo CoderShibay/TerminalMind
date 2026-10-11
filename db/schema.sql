@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS claude_messages (
     tool_name    TEXT,             -- set if role=assistant and it's a tool_use block
     project      TEXT,
     cwd          TEXT,
-    source_file  TEXT              -- which .jsonl this came from
+    source_file  TEXT,             -- which .jsonl this came from
+    agent        TEXT NOT NULL DEFAULT 'claude'
 );
 
 -- Claude Code sessions (from sessions/*.json)
@@ -32,7 +33,9 @@ CREATE TABLE IF NOT EXISTS claude_sessions (
     updated_at   INTEGER,
     status       TEXT,             -- 'active', 'idle', 'ended'
     version      TEXT,
-    kind         TEXT
+    kind         TEXT,
+    agent        TEXT NOT NULL DEFAULT 'claude',
+    native_session_id TEXT
 );
 
 -- FTS index over messages for fast search
@@ -44,6 +47,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     ts,
     uuid,
     session_id,
+    agent,
     content='claude_messages',
     content_rowid='id'
 );
@@ -143,4 +147,50 @@ CREATE VIRTUAL TABLE IF NOT EXISTS shell_commands_fts USING fts5(
     cwd,
     content='shell_commands',
     content_rowid='id'
+);
+
+-- File touch events extracted from tool_use input blocks
+CREATE TABLE IF NOT EXISTS file_touches (
+    id          INTEGER PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    tool_name   TEXT,           -- Read, Edit, Write, Bash, etc.
+    ts          TEXT,
+    project     TEXT,
+    UNIQUE(session_id, file_path, tool_name, ts)
+);
+
+CREATE INDEX IF NOT EXISTS claude_messages_agent_idx
+    ON claude_messages(agent);
+CREATE INDEX IF NOT EXISTS claude_sessions_agent_idx
+    ON claude_sessions(agent);
+CREATE INDEX IF NOT EXISTS claude_sessions_native_id_idx
+    ON claude_sessions(native_session_id);
+
+-- Spelling mistakes found in user prompts by local llama3.2 (indexer/spelling.py)
+CREATE TABLE IF NOT EXISTS spelling_mistakes (
+    id          INTEGER PRIMARY KEY,
+    wrong       TEXT NOT NULL,
+    correct     TEXT NOT NULL,
+    session_id  TEXT,
+    agent       TEXT,
+    ts          INTEGER,            -- epoch ms of the prompt
+    excerpt     TEXT,               -- words around the mistake
+    text_hash   TEXT NOT NULL,
+    UNIQUE(text_hash, wrong)
+);
+CREATE INDEX IF NOT EXISTS spelling_mistakes_wrong_idx ON spelling_mistakes(wrong);
+
+CREATE TABLE IF NOT EXISTS spelling_checked (
+    text_hash   TEXT PRIMARY KEY,
+    checked_at  INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS spelling_state (
+    source      TEXT PRIMARY KEY,   -- 'prompts' | 'messages'
+    last_id     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS spelling_ignore (
+    word        TEXT PRIMARY KEY
 );

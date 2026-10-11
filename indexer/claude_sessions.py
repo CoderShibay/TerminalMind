@@ -48,15 +48,22 @@ def run(conn) -> int:
             data.get("status", "ended"),
             data.get("version"),
             data.get("kind"),
+            session_id,
         ))
 
     if not rows:
         return 0
 
     conn.executemany(
-        """INSERT OR REPLACE INTO claude_sessions
-           (session_id, pid, cwd, project, started_at, updated_at, status, version, kind)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO claude_sessions
+           (session_id, pid, cwd, project, started_at, updated_at, status, version, kind,
+            agent, native_session_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'claude', ?)
+           ON CONFLICT(session_id) DO UPDATE SET
+             pid=excluded.pid, cwd=excluded.cwd, project=excluded.project,
+             started_at=excluded.started_at, updated_at=excluded.updated_at,
+             status=excluded.status, version=excluded.version, kind=excluded.kind,
+             agent='claude', native_session_id=excluded.native_session_id""",
         rows,
     )
 
@@ -68,7 +75,8 @@ def run(conn) -> int:
         label = _project_from_cwd(row["project"])
         if label and label not in _SKIP_PARTS:
             conn.execute(
-                "UPDATE claude_sessions SET project = ?, cwd = ? WHERE session_id = ?",
+                "UPDATE claude_sessions SET project = ?, cwd = ? "
+                "WHERE session_id = ? AND agent = 'claude'",
                 (label, row["project"], row["session_id"]),
             )
 

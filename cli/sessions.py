@@ -1,4 +1,4 @@
-"""tm sessions — list all Claude Code sessions, newest to oldest."""
+"""tm sessions — list all indexed AI sessions, newest to oldest."""
 from datetime import datetime, timedelta
 
 
@@ -22,6 +22,7 @@ def run(conn, args: list[str]) -> int:
     search_query   = None
     limit = 200
     simple = False
+    agent_filter = None
 
     i = 0
     while i < len(args):
@@ -31,6 +32,8 @@ def run(conn, args: list[str]) -> int:
             search_query = args[i + 1]; i += 2
         elif args[i] == "--limit" and i + 1 < len(args):
             limit = int(args[i + 1]); i += 2
+        elif args[i] == "--agent" and i + 1 < len(args):
+            agent_filter = args[i + 1].lower(); i += 2
         elif args[i] in ("--simple", "--ids"):
             simple = True; i += 1
         elif not args[i].startswith("-"):
@@ -40,7 +43,7 @@ def run(conn, args: list[str]) -> int:
             i += 1
 
     sql = """
-        SELECT s.session_id, s.started_at, s.status,
+        SELECT s.session_id, s.native_session_id, s.agent, s.started_at, s.status,
                t.title, t.project_tags
         FROM claude_sessions s
         LEFT JOIN session_titles t ON t.session_id = s.session_id
@@ -54,8 +57,15 @@ def run(conn, args: list[str]) -> int:
 
     if search_query:
         # Match against session ID prefix OR title — covers both use cases
-        wheres.append("(s.session_id LIKE ? OR t.title LIKE ?)")
-        params += [f"{search_query}%", f"%{search_query}%"]
+        wheres.append("(s.session_id LIKE ? OR s.native_session_id LIKE ? OR t.title LIKE ?)")
+        params += [f"{search_query}%", f"{search_query}%", f"%{search_query}%"]
+
+    if agent_filter:
+        if agent_filter not in {"claude", "codex", "agy"}:
+            print("\n  --agent must be claude, codex, or agy.\n")
+            return 1
+        wheres.append("s.agent = ?")
+        params.append(agent_filter)
 
     if wheres:
         sql += " WHERE " + " AND ".join(wheres)
@@ -73,19 +83,19 @@ def run(conn, args: list[str]) -> int:
         # Clean two-column output: ID  Title — easy to copy or pipe
         print()
         for row in rows:
-            sid   = row["session_id"][:8]
+            sid   = (row["native_session_id"] or row["session_id"])[:8]
             title = (row["title"] or "Untitled session")[:70]
-            print(f"  {sid}  {title}")
+            print(f"  {row['agent']:<6}  {sid}  {title}")
         print()
         return 0
 
     # Full table: ID, date, status, title, tags
     print()
-    print(f"  \033[2m{'ID':<10} {'STARTED':<19} {'ST':<6} TITLE\033[0m")
+    print(f"  \033[2m{'AGENT':<7} {'ID':<10} {'STARTED':<19} {'ST':<6} TITLE\033[0m")
     print("  " + "─" * 78)
 
     for row in rows:
-        sid    = row["session_id"][:8]
+        sid    = (row["native_session_id"] or row["session_id"])[:8]
         ts     = _ts(row["started_at"])
         status = row["status"] or "?"
         title  = (row["title"] or "Untitled session")[:48]
@@ -99,10 +109,10 @@ def run(conn, args: list[str]) -> int:
             st_color = "\033[2m"
 
         tag_str = f"  \033[2m[{tags}]\033[0m" if tags else ""
-        print(f"  \033[36m{sid}\033[0m  \033[2m{ts:<19}\033[0m  {st_color}{status[:4]:<6}\033[0m {title}{tag_str}")
+        print(f"  {row['agent'].upper():<7} \033[36m{sid}\033[0m  \033[2m{ts:<19}\033[0m  {st_color}{status[:4]:<6}\033[0m {title}{tag_str}")
 
     print()
-    hint = "--simple for ID+title only  ·  --project NAME  ·  tm sessions \"query\" to search"
+    hint = "--simple for ID+title only  ·  --project NAME  ·  --agent NAME  ·  tm sessions \"query\" to search"
     if search_query:
         hint = f"Showing results for: \"{search_query}\"  ·  {len(rows)} match(es)"
     print(f"  \033[2m{hint}\033[0m\n")

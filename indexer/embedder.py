@@ -1,11 +1,15 @@
 """Generate sentence embeddings for semantic search. Cached in message_embeddings table."""
 
+import os
+
 MODEL_NAME = "all-MiniLM-L6-v2"
+DOWNLOAD_ENV = "TM_ALLOW_MODEL_DOWNLOAD"
 BATCH_SIZE  = 128
 MIN_LEN     = 15   # skip very short messages
 MAX_CHARS   = 512  # truncate long messages before embedding
 
 _model      = None
+_model_error = None
 _np         = None   # numpy — loaded lazily, may not be available
 _available  = None   # None = not yet checked, True/False after first attempt
 
@@ -26,12 +30,21 @@ def _check_available() -> bool:
 
 
 def _get_model():
-    global _model
+    global _model, _model_error
     if not _check_available():
         return None
-    if _model is None:
+    if _model is None and _model_error is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(MODEL_NAME)
+        allow_download = os.environ.get(DOWNLOAD_ENV, "").lower() in {
+            "1", "true", "yes",
+        }
+        try:
+            _model = SentenceTransformer(
+                MODEL_NAME,
+                local_files_only=not allow_download,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            _model_error = exc
     return _model
 
 
@@ -58,6 +71,7 @@ def run(conn, verbose: bool = False) -> int:
            LEFT JOIN message_embeddings e ON e.message_id = m.id
            WHERE e.message_id IS NULL
              AND m.content_text IS NOT NULL
+             AND m.tool_name IS NULL
              AND length(m.content_text) >= ?
              AND m.role IN ('user', 'assistant')""",
         (MIN_LEN,)
@@ -67,6 +81,14 @@ def run(conn, verbose: bool = False) -> int:
         return 0
 
     model = _get_model()
+    if model is None:
+        if verbose:
+            print(
+                f"  Embeddings skipped — {MODEL_NAME} is not cached locally "
+                f"(run `{DOWNLOAD_ENV}=1 tm sync` once while online)"
+            )
+        return 0
+
     ids   = [r["id"] for r in rows]
     texts = [r["content_text"][:MAX_CHARS] for r in rows]
 

@@ -1,4 +1,4 @@
-"""tm context — extract relevant message excerpts for pasting into Claude."""
+"""tm context — extract relevant excerpts from indexed AI sessions."""
 import re
 import sys
 from datetime import datetime
@@ -48,16 +48,24 @@ def _format_message(text: str, full: bool, char_limit: int) -> str:
         return flat
 
 
-def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) -> int:
+def _session_match_sql() -> str:
+    return "(session_id LIKE ? OR native_session_id LIKE ?)"
+
+
+def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int,
+               agent_filter: str | None = None) -> int:
     """Return the last N messages of a session in chronological order — no search needed."""
     import re
     import subprocess
 
     if not session_filter:
         # Default to most recent session
-        row = conn.execute(
-            "SELECT session_id FROM claude_sessions ORDER BY started_at DESC LIMIT 1"
-        ).fetchone()
+        sql = "SELECT session_id FROM claude_sessions"
+        params = []
+        if agent_filter:
+            sql += " WHERE agent = ?"
+            params.append(agent_filter)
+        row = conn.execute(sql + " ORDER BY started_at DESC LIMIT 1", params).fetchone()
         if not row:
             print("\n  No sessions found.\n")
             return 0
@@ -65,8 +73,8 @@ def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) ->
 
     # Resolve + expand links
     row = conn.execute(
-        "SELECT session_id FROM claude_sessions WHERE session_id LIKE ?",
-        (session_filter + "%",)
+        f"SELECT session_id FROM claude_sessions WHERE {_session_match_sql()}",
+        (session_filter + "%", session_filter + "%")
     ).fetchone()
     if not row:
         print(f"\n  Session not found: {session_filter}\n")
@@ -92,7 +100,7 @@ def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) ->
 
     placeholders = ",".join("?" * len(session_ids))
     messages = conn.execute(
-        f"""SELECT role, content_text, ts, session_id FROM claude_messages
+        f"""SELECT role, content_text, ts, session_id, agent FROM claude_messages
             WHERE session_id IN ({placeholders})
               AND role IN ('user', 'assistant')
               AND content_text IS NOT NULL
@@ -103,7 +111,8 @@ def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) ->
     if not messages:
         # Fall back to prompts for history-only sessions
         messages = conn.execute(
-            f"""SELECT 'user' as role, prompt_text as content_text, ts, session_id
+            f"""SELECT 'user' as role, prompt_text as content_text, ts, session_id,
+                       'claude' as agent
                 FROM claude_prompts WHERE session_id IN ({placeholders})
                 ORDER BY ts DESC LIMIT ?""",
             (*session_ids, limit)
@@ -137,7 +146,7 @@ def _tail_mode(conn, session_filter: str | None, limit: int, char_limit: int) ->
     p()
 
     for msg in messages:
-        role  = "YOU " if msg["role"] == "user" else "ASST"
+        role  = "YOU " if msg["role"] == "user" else str(msg["agent"]).upper()
         text  = _format_message(msg["content_text"], True, char_limit)
         ts    = _ts(msg["ts"])
         p(f"\n{role}:  \033[2m{ts}\033[0m")
@@ -163,6 +172,7 @@ def run(conn, args: list[str]) -> int:
         print("  tm context \"question\" --full           full messages with code/errors preserved")
         print("  tm context \"question\" --session ID     search within one session only")
         print("  tm context \"question\" --top 5          limit to 5 results")
+        print("  tm context \"question\" --agent codex    filter by claude, codex, or agy")
         print("  tm context --session ID --tail         last 20 messages in order (no query needed)")
         return 1
 
@@ -173,6 +183,7 @@ def run(conn, args: list[str]) -> int:
     full       = False
     tail       = False
     char_limit = 240
+    agent_filter = None
 
     i = 0
     while i < len(args):
@@ -189,6 +200,11 @@ def run(conn, args: list[str]) -> int:
             full = True          # tail always preserves full formatting
             char_limit = 4000
             i += 1
+        elif args[i] == "--agent" and i + 1 < len(args):
+            agent_filter = args[i + 1].lower(); i += 2
+            if agent_filter not in {"claude", "codex", "agy"}:
+                print("--agent must be claude, codex, or agy")
+                return 1
         else:
             query_parts.append(args[i]); i += 1
 
@@ -196,7 +212,7 @@ def run(conn, args: list[str]) -> int:
 
     # --tail mode: no query needed — just return recent messages in order
     if tail:
-        return _tail_mode(conn, session_filter, top_n if top_n != 8 else 20, char_limit)
+        return _tail_mode(conn, session_filter, top_n if top_n != 8 else 20, char_limit, agent_filter)
 
     if not query:
         print("The command needs a query. Did you mean:")
@@ -209,8 +225,8 @@ def run(conn, args: list[str]) -> int:
     if session_filter:
         # Resolve partial ID
         row = conn.execute(
-            "SELECT session_id FROM claude_sessions WHERE session_id LIKE ?",
-            (session_filter + "%",)
+            f"SELECT session_id FROM claude_sessions WHERE {_session_match_sql()}",
+            (session_filter + "%", session_filter + "%")
         ).fetchone()
         if row:
             root_sid = row["session_id"]
@@ -266,14 +282,15 @@ def run(conn, args: list[str]) -> int:
     # ── Keyword search ────────────────────────────────────────────────────────
     try:
         kw_rows = conn.execute(
-            """SELECT m.id, m.role, m.content_text, m.ts, m.session_id
+            """SELECT m.id, m.role, m.content_text, m.ts, m.session_id, m.agent
                FROM messages_fts fts
                JOIN claude_messages m ON m.id = fts.rowid
                WHERE messages_fts MATCH ?
                  AND m.content_text IS NOT NULL
                  AND m.role IN ('user','assistant')
+               AND (? IS NULL OR m.agent = ?)
                ORDER BY m.ts DESC LIMIT 30""",
-            (query,)
+            (query, agent_filter, agent_filter)
         ).fetchall()
     except Exception:
         kw_rows = []
@@ -287,12 +304,14 @@ def run(conn, args: list[str]) -> int:
         if msg_id in seen_ids:
             continue
         row = conn.execute(
-            "SELECT id, role, content_text, ts, session_id FROM claude_messages WHERE id=?",
+            "SELECT id, role, content_text, ts, session_id, agent FROM claude_messages WHERE id=?",
             (msg_id,)
         ).fetchone()
         if not row or not row["content_text"]:
             continue
         if row["role"] not in ("user", "assistant"):
+            continue
+        if agent_filter and row["agent"] != agent_filter:
             continue
         if session_ids is not None and row["session_id"] not in session_ids:
             continue
@@ -320,13 +339,20 @@ def run(conn, args: list[str]) -> int:
         extra = []
         for msg in list(selected):
             rows = conn.execute(
-                """SELECT id, role, content_text, ts, session_id
-                   FROM claude_messages
-                   WHERE session_id IN ({})
-                     AND role IN ('user','assistant')
-                     AND content_text IS NOT NULL
-                     AND ABS(id - ?) <= 3
-                   ORDER BY id ASC""".format(",".join("?" * len(session_ids))),
+                """WITH ordered AS (
+                       SELECT id, role, content_text, ts, session_id, agent,
+                              ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id) AS rn
+                       FROM claude_messages
+                       WHERE session_id IN ({})
+                         AND role IN ('user','assistant')
+                         AND content_text IS NOT NULL
+                   ), target AS (
+                       SELECT session_id, rn FROM ordered WHERE id = ?
+                   )
+                   SELECT o.id, o.role, o.content_text, o.ts, o.session_id, o.agent
+                   FROM ordered o JOIN target t ON t.session_id = o.session_id
+                   WHERE o.rn BETWEEN t.rn - 2 AND t.rn + 2
+                   ORDER BY o.id ASC""".format(",".join("?" * len(session_ids))),
                 (*session_ids, msg["id"])
             ).fetchall()
             for r in rows:
@@ -351,18 +377,23 @@ def run(conn, args: list[str]) -> int:
 
     # ── Format ────────────────────────────────────────────────────────────────
     mode_label = "full content" if full else "excerpts"
-    lines = [f'Context from your Claude history — "{query}" [{mode_label}]', ""]
+    source_label = f"your {agent_filter.upper()} history" if agent_filter else "your AI history"
+    lines = [f'Context from {source_label} — "{query}" [{mode_label}]', ""]
 
     for sid, msgs in by_session.items():
         title_row = conn.execute(
-            "SELECT title FROM session_titles WHERE session_id=?", (sid,)
+            """SELECT t.title, s.agent, s.native_session_id
+               FROM claude_sessions s LEFT JOIN session_titles t ON t.session_id=s.session_id
+               WHERE s.session_id=?""", (sid,)
         ).fetchone()
         title = title_row["title"] if title_row else sid[:8] + "…"
+        agent = title_row["agent"] if title_row else msgs[0].get("agent", "ai")
+        native_id = title_row["native_session_id"] if title_row else sid
         first_ts = min((m["ts"] for m in msgs if m["ts"]), default="")
-        lines.append(f"─── {title} · {_ts(first_ts)} · {sid[:8]} ───")
+        lines.append(f"─── {agent.upper()} · {title} · {_ts(first_ts)} · {(native_id or sid)[:8]} ───")
 
         for msg in msgs:
-            role = "YOU " if msg["role"] == "user" else "ASST"
+            role = "YOU " if msg["role"] == "user" else str(msg.get("agent") or agent).upper()
             text = _format_message(msg["content_text"], full, char_limit)
             if full or _has_code_or_errors(msg["content_text"] or ""):
                 # Multi-line: add a blank line after each message for readability
@@ -379,6 +410,6 @@ def run(conn, args: list[str]) -> int:
     print("\n" + output + "\n")
 
     if _copy_to_clipboard(output):
-        print("  ✓ Copied to clipboard — paste into Claude\n")
+        print("  ✓ Copied to clipboard\n")
 
     return 0
