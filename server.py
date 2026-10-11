@@ -990,7 +990,7 @@ def api_tools(since: str = "", agent: str = ""):
     }
 
 
-BOARD_DIR = Path("/Users/alisyed/Documents/MessageBoard")
+BOARD_DIR = Path("/Users/alisyed/Documents/CommandCenter/Projects/MessageBoard/MessageBoard")
 
 def _read_jsonl(path: Path) -> list[dict]:
     if not path.exists():

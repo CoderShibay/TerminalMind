@@ -33,6 +33,10 @@ def claude_dir() -> Path:
 
 def install_dir() -> Path:
     """Return the TerminalMind install directory."""
+    # Running from a checkout or install: the directory holding this file
+    here = Path(__file__).resolve().parent
+    if (here / "main.py").exists():
+        return here
     # Hidden dir install (install.sh / install.ps1)
     hidden = Path.home() / ".terminalmd"
     if hidden.exists():

@@ -10,7 +10,10 @@
 #   tail -1 ~/terminalmd/shell_log.jsonl
 
 # Resolve install dir — hidden (.terminalmd) for new installs, legacy for old
-if [ -d "$HOME/.terminalmd" ]; then
+_TM_SELF="${${(%):-%x}:A:h:h}"
+if [ -f "$_TM_SELF/main.py" ]; then
+    _TM_LOG="$_TM_SELF/shell_log.jsonl"
+elif [ -d "$HOME/.terminalmd" ]; then
     _TM_LOG="$HOME/.terminalmd/shell_log.jsonl"
 else
     _TM_LOG="$HOME/terminalmd/shell_log.jsonl"
